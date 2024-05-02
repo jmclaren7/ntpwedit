@@ -1,39 +1,23 @@
 /* ===================================================================
- * Copyright (c) 2005,2006 Vadim Druzhin (cdslow@mail.ru).
- * All rights reserved.
+ * Copyright (c) 2005-2012 Vadim Druzhin (cdslow@mail.ru).
  * 
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; version 2 of the License.
  * 
- *    1. Redistributions of source code must retain the above
- * copyright notice, this list of conditions and the following
- * disclaimer.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
  * 
- *    2. Redistributions in binary form must reproduce the above
- * copyright notice, this list of conditions and the following
- * disclaimer in the documentation and/or other materials provided
- * with the distribution.
- * 
- *    3. The name of the author may not be used to endorse or promote
- * products derived from this software without specific prior written
- * permission.
- * 
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS
- * OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
- * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
- * GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
  * ===================================================================
  */
 
 #define STRICT
+#define _CRT_SECURE_NO_WARNINGS
 #include <windows.h>
 #include <stdlib.h>
 #include "dialogs.h"
@@ -61,16 +45,23 @@ enum
     ID_EDIT1,
     ID_EDIT2,
     ID_GRP_BUTTON,
-    ID_SPACER1
+    ID_SPACER1,
+    ID_GRP_PROMPT,
+    ID_LABEL_PROMPT
     };
 
-static BOOL Button_OK(
+static INT_PTR Button_OK(
     HWND window, WORD id, UINT msg, WPARAM wParam, LPARAM lParam);
-static BOOL Edit1(
+static INT_PTR Edit1(
     HWND window, WORD id, UINT msg, WPARAM wParam, LPARAM lParam);
 
 static struct DLG_Item Items[]=
     {
+    {&CtlGroupBoxV, ID_GRP_PROMPT, NULL, 0, 0, NULL},
+    {&CtlLabel, ID_LABEL_PROMPT, L""
+        L"Keep fields empty and press OK to reset password,\n"
+        L"or enter new password into both fields to change it.",
+        0, ID_GRP_PROMPT, NULL},
     {&CtlGroupBoxH, ID_GRP_PASSWORD, NULL, 0, 0, NULL},
     {&CtlGroupV, ID_GRP_LABELS, GRP_TITLE_FILL_CY, 0, ID_GRP_PASSWORD, NULL},
     {&CtlLabel, ID_LABEL1, L"New password:", 0, ID_GRP_LABELS, NULL},
@@ -85,7 +76,7 @@ static struct DLG_Item Items[]=
     {&CtlButton, IDCANCEL, L"Cancel", 0, ID_GRP_BUTTON, NULL},
     };
 
-BOOL QueryPassword(HWND window, char *pass, int pass_size)
+INT_PTR QueryPassword(HWND window, char *pass, int pass_size)
     {
     struct Pass_Param p;
 
@@ -131,11 +122,14 @@ static BOOL Get2Pass(HWND window, char **pass1, char **pass2)
     return TRUE;
     }
 
-static BOOL Button_OK(
+static INT_PTR Button_OK(
     HWND window, WORD id, UINT msg, WPARAM wParam, LPARAM lParam)
     {
     struct DLG_Data *data;
     struct Pass_Param *p;
+
+    (void)id; /* Unused */
+    (void)wParam; /* Unused */
 
     if(WM_INITDIALOG==msg)
         {
@@ -149,7 +143,7 @@ static BOOL Button_OK(
         char *pass1;
         char *pass2;
 
-        data=(struct DLG_Data *)GetWindowLong(window, GWL_USERDATA);
+        data=(struct DLG_Data *)GetWindowLongPtr(window, GWLP_USERDATA);
         p=data->param;
         if(!Get2Pass(window, &pass1, &pass2))
             return TRUE;
@@ -167,7 +161,7 @@ static BOOL Button_OK(
     return FALSE;
     }
 
-static BOOL Edit1(
+static INT_PTR Edit1(
     HWND window, WORD id, UINT msg, WPARAM wParam, LPARAM lParam)
     {
     struct DLG_Data *data;
@@ -186,7 +180,7 @@ static BOOL Edit1(
         char *pass1;
         char *pass2;
 
-        data=(struct DLG_Data *)GetWindowLong(window, GWL_USERDATA);
+        data=(struct DLG_Data *)GetWindowLongPtr(window, GWLP_USERDATA);
         p=data->param;
         if(!Get2Pass(window, &pass1, &pass2))
             return TRUE;

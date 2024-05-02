@@ -1,35 +1,18 @@
 /* ===================================================================
- * Copyright (c) 2005,2006 Vadim Druzhin (cdslow@mail.ru).
- * All rights reserved.
+ * Copyright (c) 2005-2012 Vadim Druzhin (cdslow@mail.ru).
  * 
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; version 2 of the License.
  * 
- *    1. Redistributions of source code must retain the above
- * copyright notice, this list of conditions and the following
- * disclaimer.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
  * 
- *    2. Redistributions in binary form must reproduce the above
- * copyright notice, this list of conditions and the following
- * disclaimer in the documentation and/or other materials provided
- * with the distribution.
- * 
- *    3. The name of the author may not be used to endorse or promote
- * products derived from this software without specific prior written
- * permission.
- * 
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS
- * OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
- * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
- * GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
  * ===================================================================
  */
 
@@ -52,23 +35,23 @@
 #include "dlgabout.h"
 #include "version.h"
 
-static BOOL Button_CANCEL(
+static INT_PTR Button_CANCEL(
     HWND window, WORD id, UINT msg, WPARAM wParam, LPARAM lParam);
-static BOOL Button_PATH(
+static INT_PTR Button_PATH(
     HWND window, WORD id, UINT msg, WPARAM wParam, LPARAM lParam);
-static BOOL Edit_PATH(
+static INT_PTR Edit_PATH(
     HWND window, WORD id, UINT msg, WPARAM wParam, LPARAM lParam);
-static BOOL Button_OPEN(
+static INT_PTR Button_OPEN(
     HWND window, WORD id, UINT msg, WPARAM wParam, LPARAM lParam);
-static BOOL Button_UNLOCK(
+static INT_PTR Button_UNLOCK(
     HWND window, WORD id, UINT msg, WPARAM wParam, LPARAM lParam);
-static BOOL Button_PASS(
+static INT_PTR Button_PASS(
     HWND window, WORD id, UINT msg, WPARAM wParam, LPARAM lParam);
-static BOOL Button_SAVE(
+static INT_PTR Button_SAVE(
     HWND window, WORD id, UINT msg, WPARAM wParam, LPARAM lParam);
-static BOOL ListProc(
+static INT_PTR ListProc(
     HWND window, WORD id, UINT msg, WPARAM wParam, LPARAM lParam);
-static BOOL Button_ABOUT(
+static INT_PTR Button_ABOUT(
     HWND window, WORD id, UINT msg, WPARAM wParam, LPARAM lParam);
 static BOOL OpenDialog(HWND window, char *namebuf, int bufsize);
 static int ListUsers(HWND window, char *path);
@@ -86,9 +69,9 @@ enum
     ID_GRP_ABOUT=101,
     ID_ICON_ABOUT,
     ID_SPACER_ABOUT1,
-    ID_GRP_LABEL,
-    ID_LABEL_ABOUT,
+    ID_GRP_ABOUT_FILL,
     ID_SPACER_ABOUT2,
+    ID_GRP_ABOUT_ICON,
     ID_BUTTON_ABOUT,
     ID_GRP_PATH,
     ID_EDIT_PATH,
@@ -105,40 +88,48 @@ enum
     ID_BUTTON_PASS,
     ID_GRP_BUTTON,
     ID_SPACER_OK,
-    ID_BUTTON_SAVE
+    ID_BUTTON_SAVE,
+    ID_GRP_MIDDLE
     };
 
 static struct DLG_Item Items[]=
     {
-    {&CtlGroupBoxH, ID_GRP_ABOUT, NULL, 0, 0, NULL},
-    {&CtlIcon, ID_ICON_ABOUT, L"IconApp", 0, ID_GRP_ABOUT, NULL},
-    {&CtlGroupBoxSpacer, ID_SPACER_ABOUT1, NULL, 0, ID_GRP_ABOUT, NULL},
-    {&CtlGroupH, ID_GRP_LABEL, GRP_TITLE_FILL_CX, 0, ID_GRP_ABOUT, NULL},
-    {&CtlLabel, ID_LABEL_ABOUT, L"NTPWEdit \xA9 2005,2006 Vadim Druzhin", 0, ID_GRP_LABEL, NULL},
-    {&CtlGroupBoxSpacer, ID_SPACER_ABOUT2, NULL, 0, ID_GRP_ABOUT, NULL},
-    {&CtlButton, ID_BUTTON_ABOUT, L"About", 0, ID_GRP_ABOUT, Button_ABOUT},
     {&CtlGroupBoxH, ID_GRP_PATH, L"Path to SAM file", 0, 0, NULL},
     {&CtlEdit, ID_EDIT_PATH, L"C:\\WINDOWS\\SYSTEM32\\CONFIG\\SAM", 0, ID_GRP_PATH, Edit_PATH},
     {&CtlGroupBoxSpacer, ID_SPACER_PATH, NULL, 0, ID_GRP_PATH, NULL},
     {&CtlSmallButton, ID_BUTTON_PATH, L"...", 0, ID_GRP_PATH, Button_PATH},
     {&CtlGroupBoxSpacer, ID_SPACER_OPEN, NULL, 0, ID_GRP_PATH, NULL},
-    {&CtlButton, ID_BUTTON_OPEN, L"(Re)open", 0, ID_GRP_PATH, Button_OPEN},
-    {&CtlGroupBoxV, ID_GRP_LIST, L"User list", 0, 0, NULL},
+    {&CtlButton, ID_BUTTON_OPEN, L"Open", 0, ID_GRP_PATH, Button_OPEN},
+
+    {&CtlGroupH, ID_GRP_MIDDLE, NULL, 0, 0, NULL},
+
+    {&CtlGroupBoxV, ID_GRP_LIST, L"User list", 0, ID_GRP_MIDDLE, NULL},
     {&CtlListView, ID_LIST_USERS, L"ID\tName", 0, ID_GRP_LIST, ListProc},
     {&CtlGroupBoxSpacer, ID_SPACER_LIST, NULL, 0, ID_GRP_LIST, NULL},
     {&CtlGroupH, ID_GRP_ACTIONS, NULL, 0, ID_GRP_LIST, NULL},
     {&CtlButton, ID_BUTTON_UNLOCK, L"Unlock", 0, ID_GRP_ACTIONS, Button_UNLOCK},
     {&CtlGroupBoxSpacer, ID_SPACER_UNLOCK, NULL, 0, ID_GRP_ACTIONS, NULL},
     {&CtlButton, ID_BUTTON_PASS, L"Change password", 0, ID_GRP_ACTIONS, Button_PASS},
+
     {&CtlGroupBoxH, ID_GRP_BUTTON, NULL, 0, 0, NULL},
     {&CtlButton, ID_BUTTON_SAVE, L"Save changes", 0, ID_GRP_BUTTON, Button_SAVE},
     {&CtlGroupBoxSpacer, ID_SPACER_OK, NULL, 0, ID_GRP_BUTTON, NULL},
     {&CtlDefButton, IDCANCEL, L"Exit", 0, ID_GRP_BUTTON, Button_CANCEL},
+
+    {&CtlGroupBoxV, ID_GRP_ABOUT, NULL, 0, ID_GRP_MIDDLE, NULL},
+    {&CtlGroupBoxSpacer, ID_SPACER_ABOUT1, NULL, 0, ID_GRP_ABOUT, NULL},
+    {&CtlGroupH, ID_GRP_ABOUT_ICON, GRP_TITLE_FILL_CX, 0, ID_GRP_ABOUT, NULL},
+    {&CtlIcon, ID_ICON_ABOUT, L"IconApp", 0, ID_GRP_ABOUT_ICON, NULL},
+    {&CtlGroupBoxSpacer, ID_SPACER_ABOUT2, NULL, 0, ID_GRP_ABOUT, NULL},
+    {&CtlButton, ID_BUTTON_ABOUT, L"About", 0, ID_GRP_ABOUT, Button_ABOUT},
+    {&CtlGroupH, ID_GRP_ABOUT_FILL, GRP_TITLE_FILL, 0, ID_GRP_ABOUT, NULL},
     };
 
-static BOOL Button_CANCEL(
+static INT_PTR Button_CANCEL(
     HWND window, WORD id, UINT msg, WPARAM wParam, LPARAM lParam)
     {
+    (void)id; /* Unused */
+
     if(WM_INITDIALOG==msg)
         {
         SetFocus(GetDlgItem(window, ID_BUTTON_PATH));
@@ -148,8 +139,8 @@ static BOOL Button_CANCEL(
         {
         if(IsWindowEnabled(GetDlgItem(window, ID_BUTTON_SAVE)))
             {
-            if(IDOK==AppMessageBox(window,
-                    L"Changes not saved.\n\nSave before exit?", MB_OKCANCEL)
+            if(IDYES==AppMessageBox(window,
+                    L"Changes not saved.\n\nSave before exit?", MB_YESNO)
                 )
                 Button_SAVE(window, ID_BUTTON_SAVE, msg, wParam, lParam);
             }
@@ -160,9 +151,13 @@ static BOOL Button_CANCEL(
     return FALSE;
     }       
 
-static BOOL Button_ABOUT(
+static INT_PTR Button_ABOUT(
     HWND window, WORD id, UINT msg, WPARAM wParam, LPARAM lParam)
     {
+    (void)id; /* Unused */
+    (void)wParam; /* Unused */
+    (void)lParam; /* Unused */
+
     if(WM_COMMAND==msg)
         {
         AboutDialog(window);
@@ -172,11 +167,15 @@ static BOOL Button_ABOUT(
     return FALSE;
     }       
 
-static BOOL Button_PATH(
+static INT_PTR Button_PATH(
     HWND window, WORD id, UINT msg, WPARAM wParam, LPARAM lParam)
     {
     char path[MAX_PATH];
     
+    (void)id; /* Unused */
+    (void)wParam; /* Unused */
+    (void)lParam; /* Unused */
+
     if(WM_COMMAND==msg)
         {
         GetDlgItemText(window, ID_EDIT_PATH, path, sizeof(path));
@@ -191,11 +190,14 @@ static BOOL Button_PATH(
     return FALSE;
     }       
 
-static BOOL Edit_PATH(
+static INT_PTR Edit_PATH(
     HWND window, WORD id, UINT msg, WPARAM wParam, LPARAM lParam)
     {
     DWORD attr;
     char path[MAX_PATH];
+
+    (void)id; /* Unused */
+    (void)lParam; /* Unused */
 
     if(WM_INITDIALOG==msg || (WM_COMMAND==msg && EN_CHANGE==HIWORD(wParam)))
         {
@@ -212,10 +214,14 @@ static BOOL Edit_PATH(
     return FALSE;
     }
 
-static BOOL Button_OPEN(
+static INT_PTR Button_OPEN(
     HWND window, WORD id, UINT msg, WPARAM wParam, LPARAM lParam)
     {
     char path[MAX_PATH];
+
+    (void)id; /* Unused */
+    (void)wParam; /* Unused */
+    (void)lParam; /* Unused */
 
     if(WM_COMMAND==msg)
         {
@@ -225,9 +231,9 @@ static BOOL Button_OPEN(
         else if(is_hives_ro())
             AppMessageBox(window,
                 L"SAM file opened read-only,\n"
-                "so changes cannot be saved!\n\n"
-                "Modify file attributes/permissions\n"
-                "to allow write access, and reopen it.", MB_OK);
+                L"so changes cannot be saved!\n\n"
+                L"Modify file attributes/permissions\n"
+                L"to allow write access, and reopen it.", MB_OK);
         DisableUserOptions(window);
         CheckSave(window);
         return TRUE;
@@ -236,9 +242,12 @@ static BOOL Button_OPEN(
     return FALSE;
     }
 
-static BOOL Button_UNLOCK(
+static INT_PTR Button_UNLOCK(
     HWND window, WORD id, UINT msg, WPARAM wParam, LPARAM lParam)
     {
+    (void)wParam; /* Unused */
+    (void)lParam; /* Unused */
+
     if(WM_INITDIALOG==msg)
         {
         EnableWindow(GetDlgItem(window, id), FALSE);
@@ -247,14 +256,18 @@ static BOOL Button_UNLOCK(
     else if(WM_COMMAND==msg)
         {
         int pos;
-        LPARAM param;
+        int param;
 
         pos=ListGetPos(window, ID_LIST_USERS);
         if(pos>=0)
             {
-            param=ListGetParam(window, ID_LIST_USERS, pos);
+            param=(int)ListGetParam(window, ID_LIST_USERS, pos);
             if(unlock_account(param))
+                {
                 EnableWindow(GetDlgItem(window, id), FALSE);
+                SendMessage(window, WM_NEXTDLGCTL,
+                    (WPARAM)GetDlgItem(window, ID_LIST_USERS), TRUE);
+                }
             else
                 AppMessageBox(window, L"Unlock failed!", MB_OK);
             CheckSave(window);
@@ -265,9 +278,12 @@ static BOOL Button_UNLOCK(
     return FALSE;
     }
 
-static BOOL Button_PASS(
+static INT_PTR Button_PASS(
     HWND window, WORD id, UINT msg, WPARAM wParam, LPARAM lParam)
     {
+    (void)wParam; /* Unused */
+    (void)lParam; /* Unused */
+
     if(WM_INITDIALOG==msg)
         {
         EnableWindow(GetDlgItem(window, id), FALSE);
@@ -276,13 +292,13 @@ static BOOL Button_PASS(
     else if(WM_COMMAND==msg)
         {
         int pos;
-        LPARAM param;
+        int param;
         char pass[17];
 
         pos=ListGetPos(window, ID_LIST_USERS);
         if(pos>=0)
             {
-            param=ListGetParam(window, ID_LIST_USERS, pos);
+            param=(int)ListGetParam(window, ID_LIST_USERS, pos);
             if(QueryPassword(window, pass, sizeof(pass)))
                 {
                 if(!change_password(param, pass))
@@ -293,7 +309,7 @@ static BOOL Button_PASS(
                     else
                         AppMessageBox(window,
                             L"Password not changed!\n"
-                            "Try again using BLANK passsword.", MB_OK);
+                            L"Try again using BLANK passsword.", MB_OK);
                     }
                 CheckSave(window);
                 }
@@ -304,9 +320,12 @@ static BOOL Button_PASS(
     return FALSE;
     }
 
-static BOOL Button_SAVE(
+static INT_PTR Button_SAVE(
     HWND window, WORD id, UINT msg, WPARAM wParam, LPARAM lParam)
     {
+    (void)wParam; /* Unused */
+    (void)lParam; /* Unused */
+
     if(WM_INITDIALOG==msg)
         {
         EnableWindow(GetDlgItem(window, id), FALSE);
@@ -316,28 +335,32 @@ static BOOL Button_SAVE(
         {
         if(!write_hives())
             AppMessageBox(window, L"Writing SAM failed!", MB_OK);
+        SendMessage(window, WM_NEXTDLGCTL,
+            (WPARAM)GetDlgItem(window, IDCANCEL), TRUE);
         CheckSave(window);
         }
 
     return FALSE;
     }
 
-static BOOL ListProc(
+static INT_PTR ListProc(
     HWND window, WORD id, UINT msg, WPARAM wParam, LPARAM lParam)
     {
+    (void)wParam; /* Unused */
+
     if(WM_NOTIFY==msg)
         {
         NMHDR *nm=(NMHDR *)lParam;
 
-        if(LVN_ITEMCHANGED==nm->code || NM_SETFOCUS==nm->code)
+        if((UINT)LVN_ITEMCHANGED==nm->code || (UINT)NM_SETFOCUS==nm->code)
             {
             int pos;
-            LPARAM param;
+            int param;
 
             pos=ListGetPos(window, id);
             if(pos>=0)
                 {
-                param=ListGetParam(window, id, pos);
+                param=(int)ListGetParam(window, id, pos);
                 EnableUserOptions(window, param);
                 }
             else
@@ -351,7 +374,7 @@ static BOOL ListProc(
 
 static int ListGetPos(HWND window, WORD id)
     {
-    return SendDlgItemMessage(window, id, LVM_GETNEXTITEM,
+    return (int)SendDlgItemMessage(window, id, LVM_GETNEXTITEM,
         -1, LVNI_ALL|LVNI_SELECTED);
     }
 
@@ -499,8 +522,8 @@ int main(void)
         0, 0, 0, 0, NULL, NULL, NULL, NULL);
     if(window)
         {
-        SetClassLong(window, GCL_HICON,
-            (LONG)LoadIcon(GetModuleHandle(NULL), "IconApp"));
+        SetClassLongPtr(window, GCLP_HICON,
+            (LONG_PTR)LoadIcon(GetModuleHandle(NULL), "IconApp"));
         DestroyWindow(window);
         }
 
@@ -519,3 +542,20 @@ int main(void)
 
     return 0;
     }
+
+#ifdef _MSC_VER
+int CALLBACK WinMain(
+    HINSTANCE hInstance,
+    HINSTANCE hPrevInstance,
+    LPSTR lpCmdLine,
+    int nCmdShow
+    )
+    {
+    (void)hInstance; /* Unused */
+    (void)hPrevInstance; /* Unused */
+    (void)lpCmdLine; /* Unused */
+    (void)nCmdShow; /* Unused */
+
+    return main();
+    }
+#endif /* _MSC_VER */

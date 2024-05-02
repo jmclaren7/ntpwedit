@@ -1,35 +1,18 @@
 /* ===================================================================
- * Copyright (c) 2005,2006 Vadim Druzhin (cdslow@mail.ru).
- * All rights reserved.
+ * Copyright (c) 2005-2012 Vadim Druzhin (cdslow@mail.ru).
  * 
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; version 2 of the License.
  * 
- *    1. Redistributions of source code must retain the above
- * copyright notice, this list of conditions and the following
- * disclaimer.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
  * 
- *    2. Redistributions in binary form must reproduce the above
- * copyright notice, this list of conditions and the following
- * disclaimer in the documentation and/or other materials provided
- * with the distribution.
- * 
- *    3. The name of the author may not be used to endorse or promote
- * products derived from this software without specific prior written
- * permission.
- * 
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS
- * OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
- * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
- * GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
  * ===================================================================
  */
 
@@ -46,11 +29,13 @@
 #include "version.h"
 #include "dlgabout.h"
 
-static BOOL URL_Proc(
+static INT_PTR URL_Proc(
     HWND window, WORD id, UINT msg, WPARAM wParam, LPARAM lParam);
-static BOOL Version_Proc(
+static INT_PTR Version_Proc(
     HWND window, WORD id, UINT msg, WPARAM wParam, LPARAM lParam);
 static void ExecDlgURL(HWND window, int item);
+static INT_PTR NTReg_Proc(
+    HWND window, WORD id, UINT msg, WPARAM wParam, LPARAM lParam);
 
 enum
     {
@@ -67,7 +52,9 @@ enum
     ID_LABEL_MAIL,
     ID_LABEL_URL,
     ID_GRP_CREDITS,
-    ID_LABEL_CREDITS,
+    ID_LABEL_CREDITS_PNH,
+    ID_LABEL_CREDITS_NTREG,
+    ID_LABEL_CREDITS_SSL,
     ID_GRP_OK
     };
 
@@ -79,31 +66,34 @@ static struct DLG_Item Items[]=
     {&CtlGroupBoxSpacer, ID_ICON_SPACER, NULL, 0, ID_GRP_ABOUT, NULL},
     {&CtlGroupV, ID_GRP_VERSION, NULL, 0, ID_GRP_ABOUT, NULL},
     {&CtlLabel, ID_LABEL_VERSION, NULL, 0, ID_GRP_VERSION, Version_Proc},
-    {&CtlLabel, ID_LABEL_LICENSE, L"FREEWARE", 0, ID_GRP_VERSION, NULL},
+    {&CtlLabel, ID_LABEL_LICENSE, L"GPL", 0, ID_GRP_VERSION, NULL},
     {&CtlLabel, ID_V_SPACER1, L" ", 0, ID_GRP_VERSION, NULL},
-    {&CtlLabel, ID_LABEL_COPYRIGHT, L"\xA9 2005,2006 Vadim Druzhin", 0, ID_GRP_VERSION, NULL},
+    {&CtlLabel, ID_LABEL_COPYRIGHT, L"\xA9 2005-2012 Vadim Druzhin", 0, ID_GRP_VERSION, NULL},
     {&CtlLabel, ID_V_SPACER2, L" ", 0, ID_GRP_VERSION, NULL},
-    {&CtlLabel, ID_LABEL_MAIL, L"E-Mail: cdslow@mail.ru", 0, ID_GRP_VERSION, NULL},
+    {&CtlLabel, ID_LABEL_MAIL, L"mailto:cdslow@mail.ru", 0, ID_GRP_VERSION, URL_Proc},
     {&CtlLabel, ID_LABEL_URL, L"http://cdslow.org.ru/ntpwedit/", 0, ID_GRP_VERSION, URL_Proc},
-    {&CtlGroupBoxH, ID_GRP_CREDITS, NULL, 0, 0, NULL},
-    {&CtlLabel, ID_LABEL_CREDITS, L""
-        "\nIncluded parts of chntpw source and ntreg source (registry edit library)\n"
-        "is Copyright (c) 1997-2004 Petter Nordahl-Hagen, pnordahl@eunet.no\n"
-        "\nThis product includes software developed by the OpenSSL Project\n"
-        "for use in the OpenSSL Toolkit. (http://www.openssl.org/)\n"
-        "\nThis product includes cryptographic software written by\n"
-        "Eric Young (eay@cryptsoft.com)\n",
+    {&CtlGroupBoxV, ID_GRP_CREDITS, NULL, 0, 0, NULL},
+    {&CtlLabel, ID_LABEL_CREDITS_PNH,
+        L"\nIncluded parts of chntpw and ntreg (registry edit library) is\n"
+        L"Copyright (c) 1997-2011 Petter Nordahl-Hagen, pnh@pogostick.net\n",
+        0, ID_GRP_CREDITS, NULL},
+    {&CtlLabel, ID_LABEL_CREDITS_NTREG, NULL, 0, ID_GRP_CREDITS, NTReg_Proc},
+    {&CtlLabel, ID_LABEL_CREDITS_SSL,
+        L"\nThis product includes software developed by the OpenSSL Project\n"
+        L"for use in the OpenSSL Toolkit. (http://www.openssl.org/)\n"
+        L"\nThis product includes cryptographic software written by Eric Young\n"
+        L"(eay@cryptsoft.com).  This product includes software written by Tim\n"
+        L"Hudson (tjh@cryptsoft.com).\n",
         0, ID_GRP_CREDITS, NULL},
     {&CtlGroupBoxH, ID_GRP_OK, NULL, 0, 0, NULL},
     {&CtlDefButton, IDOK, L"OK", 0, ID_GRP_OK, NULL},
     };
 
-
-
-
-static BOOL URL_Proc(
+static INT_PTR URL_Proc(
     HWND window, WORD id, UINT msg, WPARAM wParam, LPARAM lParam)
     {
+    (void)lParam; /* Unused */
+
     if(WM_COMMAND==msg)
         {
         if(HIWORD(wParam)==STN_CLICKED)
@@ -116,18 +106,38 @@ static BOOL URL_Proc(
         {
         SetTextColor((HDC)wParam, RGB(0, 0, 255));
         SetBkColor((HDC)wParam, GetSysColor(COLOR_3DFACE));
-        return (LRESULT)GetSysColorBrush(COLOR_3DFACE);
+        return (INT_PTR)GetSysColorBrush(COLOR_3DFACE);
         }
     
     return FALSE;
     }
 
-static BOOL Version_Proc(
+static INT_PTR Version_Proc(
     HWND window, WORD id, UINT msg, WPARAM wParam, LPARAM lParam)
     {
+    (void)wParam; /* Unused */
+    (void)lParam; /* Unused */
+
     if(WM_INITDIALOG==msg)
         {
         SetDlgItemTextU(window, id, AppTitle);
+        return TRUE;
+        }
+    
+    return FALSE;
+    }
+
+static INT_PTR NTReg_Proc(
+    HWND window, WORD id, UINT msg, WPARAM wParam, LPARAM lParam)
+    {
+    extern char ntreg_version[];
+
+    (void)wParam; /* Unused */
+    (void)lParam; /* Unused */
+
+    if(WM_INITDIALOG==msg)
+        {
+        SetDlgItemText(window, id, ntreg_version);
         return TRUE;
         }
     

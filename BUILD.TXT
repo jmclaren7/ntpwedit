@@ -1,22 +1,38 @@
-To compile ntpwedit you will need:
+* Compilation with MINGW *
 
-1) This sources :)
-2) MINGW compiler (http://www.mingw.org/)
-3) Any working PERL interpreter (for openssl build process)
-4) OpenSSL 0.9.7d sources (other versions may also work)
-   (http://www.openssl.org/)
+Requirements:
+  - MINGW compiler (http://www.mingw.org/)
+    or MinGW-w64 (http://mingw-w64.sourceforge.net/)
+  - CMake 2.8.4 or newer (http://www.cmake.org/)
+  - PERL interpreter (e.g. http://strawberryperl.com/)
+  - OpenSSL 0.9.* sources (http://www.openssl.org/)
 
-After you get all parts, do this:
+All tools must be accesible through PATH environment variable.
 
-Install MINGW and PERL. Installed executables must be accessible through
-PATH environment variable. Copy "mingw32-make.exe" into "make.exe"
-(located in mingw "bin" directory).
+Procedure:
+  1) Extract archive with NTPWEdit sources
+  2) Extract archive with OpenSSL sources in the same directory
+  3) Run "configure-mingw.cmd" for 32-bit build
+     or "configure-mingw64.cmd" for 64-bit build
+  4) Go to "build" subdirectory
+  5) Run "mingw32-make"
 
-Unpack OpenSSL sources into ntpwedit directory. After unpacking,
-directory openssl-0.9.7d must be present.
 
-Run: openssl.bat
-    - openssl library will be compiled
+* Compilation with MS Visual C *
 
-Next run: make release
-    - ntpwedit.exe will be compiled and linked
+Requirements:
+  - MS Visual Studio 2010 or newer
+    or MS Windows SDK for Windows 7 and .NET 4 or newer
+  - CMake 2.8.4 or newer (http://www.cmake.org/)
+  - PERL interpreter (e.g. http://strawberryperl.com/)
+  - OpenSSL 0.9.* sources (http://www.openssl.org/)
+
+All tools must be accesible through PATH environment variable.
+
+Procedure:
+  1) Extract archive with NTPWEdit sources
+  2) Extract archive with OpenSSL sources in the same directory
+  3) Run "configure-msvc.cmd" for 32-bit build
+     or "configure-msvc64.cmd" for 64-bit build
+  4) Go to "build" subdirectory
+  5) Run "nmake"

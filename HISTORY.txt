@@ -1,0 +1,17 @@
+ntpwedit - Copyright (c) 2005-2012 Vadim Druzhin (cdslow@mail.ru)
+
+* 04.10.2012 Vadim Druzhin <cdslow@mail.ru>
+  Version 0.4
+  + based on chntpw 110511
+  + CMake-based build system
+  + added support for 64-bit builds
+  + added support for MS VisualC++ compiler
+
+* 11.06.2007 Vadim Druzhin <cdslow@mail.ru>
+  Version 0.3
+  + based on new chntpw version 0.99.4 070409 (decade)
+  + license changed to GPL
+
+* 10.01.2006 Vadim Druzhin <cdslow@mail.ru>
+  Version 0.2
+  = First public release
