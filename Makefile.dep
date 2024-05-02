@@ -1,0 +1,28 @@
+dlgabout.o: dlgabout.c dlglib/dialogs.h dlglib/ctl_groupbox.h \
+  dlglib/ctl_image.h dlglib/ctl_label.h dlglib/ctl_button.h \
+  dlglib/unicode.h version.h dlgabout.h
+dlgpass.o: dlgpass.c dlglib/dialogs.h dlglib/ctl_label.h \
+  dlglib/ctl_button.h dlglib/ctl_groupbox.h dlglib/ctl_edit.h version.h \
+  dlgpass.h
+log.o: log.c log.h
+main.o: main.c ntpw.h log.h dlglib/unicode.h dlglib/dialogs.h \
+  dlglib/ctl_groupbox.h dlglib/ctl_edit.h dlglib/ctl_button.h \
+  dlglib/ctl_listview.h dlglib/ctl_image.h dlglib/ctl_label.h message.h \
+  dlgpass.h dlgabout.h version.h
+message.o: message.c dlglib/dialogs.h dlglib/ctl_groupbox.h \
+  dlglib/ctl_image.h dlglib/ctl_label.h dlglib/ctl_button.h version.h \
+  message.h
+ntpw.o: ntpw.c openssl-0.9.7d/outinc/openssl/des.h \
+  openssl-0.9.7d/outinc/openssl/opensslconf.h \
+  openssl-0.9.7d/outinc/openssl/e_os2.h \
+  openssl-0.9.7d/outinc/openssl/des_old.h \
+  openssl-0.9.7d/outinc/openssl/symhacks.h \
+  openssl-0.9.7d/outinc/openssl/ui_compat.h \
+  openssl-0.9.7d/outinc/openssl/ui.h \
+  openssl-0.9.7d/outinc/openssl/crypto.h \
+  openssl-0.9.7d/outinc/openssl/stack.h \
+  openssl-0.9.7d/outinc/openssl/safestack.h \
+  openssl-0.9.7d/outinc/openssl/opensslv.h \
+  openssl-0.9.7d/outinc/openssl/md4.h ntreg.h sam.h log.h ntpw.h
+ntreg.o: ntreg.c log.h ntreg.h
+version.o: version.c version.h

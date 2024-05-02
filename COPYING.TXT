@@ -1,0 +1,97 @@
+/* ===================================================================
+ * Copyright (c) 2005,2006 Vadim Druzhin (cdslow@mail.ru).
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 
+ *    1. Redistributions of source code must retain the above
+ * copyright notice, this list of conditions and the following
+ * disclaimer.
+ * 
+ *    2. Redistributions in binary form must reproduce the above
+ * copyright notice, this list of conditions and the following
+ * disclaimer in the documentation and/or other materials provided
+ * with the distribution.
+ * 
+ *    3. The name of the author may not be used to endorse or promote
+ * products derived from this software without specific prior written
+ * permission.
+ * 
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS
+ * OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+ * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+ * GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * ===================================================================
+ */
+
+The Offline NT Password & Registry Editor
+
+Copyright information & credits for:
+chntpw binary
+chntpw source
+ntreg source (registry edit library)
+is Copyright (c) 1997-2004 Petter Nordahl-Hagen, pnordahl@eunet.no
+
+Rules (someone calls it license):
+The chntpw binary & source can be both changed and distributed 
+by anyone in any way they like if:
+1) No one makes money on it (commercial sales is a big NONO)
+ except: a) Charging for media/packaging/printed docs/support/shipping
+	    is allowed.
+         b) Inclusion in typical linux, *bsd or similar OS
+	    distributions (also commercial)
+	    is allowed as long as use of chntpw & ntreg is
+	    not the distributions primary purpose. Anyway it's
+	    nice if I get notified any such inclusion.
+2) The source must be available (at least as an option)
+3) The changed program also follows these rules.
+4) As long as code written by me is included, it must give me credit,
+   at least in the source code and docs.
+
+If you ask I will very likely allow other types of distribution.
+(have already had questions of it as a bonus on eBay auctions.
+ ask, and you will likely get permission)
+I'm just a kind of control freak, so I want to know what's going on.
+
+
+
+This program is still considered a huge HACK so please note::
+
+ * THIS SOFTWARE IS PROVIDED BY PETTER NORDAHL-HAGEN `AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+
+(sorry Eric Young, I borrowed your disclaimer, too..)
+
+---------------------------------------------------------------------------------
+
+This software uses some routines & links with routines
+by the following people/organizations:
+
+ * As of 2001, it now uses OpenSSL for MD4 & DES.
+ * Thanks to Denis Ducamp for patches to make it work with OpenSSL.
+ * 
+ * Part of some routines, information and ideas taken from
+ * pwdump by Jeremy Allison.
+ *
+ * Some stuff from NTCrack by Jonathan Wilkins.
+
+--------------------------------------------------------------------------------
+

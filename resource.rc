@@ -1,0 +1,8 @@
+LANGUAGE 0,0
+
+IconApp         ICON "app.ico"
+
+//Winuser.rh includes the following defines:
+#define CREATEPROCESS_MANIFEST_RESOURCE_ID 1
+#define RT_MANIFEST 24
+CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "ntpwedit.exe.manifest"

@@ -1,0 +1,22 @@
+To compile ntpwedit you will need:
+
+1) This sources :)
+2) MINGW compiler (http://www.mingw.org/)
+3) Any working PERL interpreter (for openssl build process)
+4) OpenSSL 0.9.7d sources (other versions may also work)
+   (http://www.openssl.org/)
+
+After you get all parts, do this:
+
+Install MINGW and PERL. Installed executables must be accessible through
+PATH environment variable. Copy "mingw32-make.exe" into "make.exe"
+(located in mingw "bin" directory).
+
+Unpack OpenSSL sources into ntpwedit directory. After unpacking,
+directory openssl-0.9.7d must be present.
+
+Run: openssl.bat
+    - openssl library will be compiled
+
+Next run: make release
+    - ntpwedit.exe will be compiled and linked
