@@ -2,13 +2,6 @@ cmake_minimum_required(VERSION 2.8.4)
 
 project(NTPWEdit C RC)
 
-if(MINGW)
-    find_library(OPENSSL_LIBRARIES "crypto")
-else()
-    find_package(OpenSSL REQUIRED)
-endif(MINGW)
-message(STATUS "OpenSSL LIB: ${OPENSSL_LIBRARIES}")
-
 if(CMAKE_COMPILER_IS_GNUCC)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pedantic -Wall -Wextra")
 endif(CMAKE_COMPILER_IS_GNUCC)
@@ -23,13 +16,15 @@ add_subdirectory(libntpw)
 
 include_directories(res libdlg libntpw)
 
-if(X64)
+if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+    set(EXE ntpwedit64)
     set(RES resource64.rc)
 else()
+    set(EXE ntpwedit)
     set(RES resource.rc)
-endif(X64)
+endif(CMAKE_SIZEOF_VOID_P EQUAL 8)
 
-add_executable(ntpwedit
+add_executable(${EXE}
     dlgabout.c
     dlgpass.c
     main.c
@@ -37,5 +32,5 @@ add_executable(ntpwedit
     version.c
     ${RES}
     )
-target_link_libraries(ntpwedit dlglib ntpw ${OPENSSL_LIBRARIES})
-set_target_properties(ntpwedit PROPERTIES LINK_FLAGS "${CMAKE_CREATE_WIN32_EXE} ${XLINK}")
+target_link_libraries(${EXE} dlglib ntpw)
+set_target_properties(${EXE} PROPERTIES LINK_FLAGS "${CMAKE_CREATE_WIN32_EXE} ${XLINK}")

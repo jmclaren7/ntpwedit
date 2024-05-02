@@ -1,5 +1,5 @@
 /* ===================================================================
- * Copyright (c) 2005-2012 Vadim Druzhin (cdslow@mail.ru).
+ * Copyright (c) 2005-2014 Vadim Druzhin (cdslow@mail.ru).
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,24 +18,20 @@
 
 /*
  * This file uses parts of code from chntpw.c, which is
- * Copyright (c) 1997-2011 Petter Nordahl-Hagen.
+ * Copyright (c) 1997-2014 Petter Nordahl-Hagen.
  */ 
 
-#define _CRT_SECURE_NO_WARNINGS
 #include <stdlib.h>
 #include <stdio.h>
 #include <ctype.h>
 #include <string.h>
-#include <openssl/des.h>
-#include <openssl/md4.h>
+#include "tomcrypt.h"
 #include "ntreg.h"
 #include "sam.h"
 #include "log.h"
 #include "ntpw.h"
 
-#define MD4Init MD4_Init
-#define MD4Update MD4_Update
-#define MD4Final MD4_Final
+int gverbose = 0;
 
 static struct hive *hive[H_COUNT];
 static int max_sam_lock = 0;
@@ -43,8 +39,7 @@ static char user_path_1[]="\\SAM\\Domains\\Account\\Users\\";
 static char user_path_V[]="\\V";
 static char user_path_F[]="\\F";
 
-static int compute_pw(char *buf, int rid, int vlen, char *password);
-static void check_get_samdata(void);
+static int compute_pw(unsigned char *buf, int rid, int vlen, char *password);
 static void sid_to_key1(unsigned long sid,unsigned char deskey[8]);
 static void sid_to_key2(unsigned long sid,unsigned char deskey[8]);
 static void E1(unsigned char *k, unsigned char *d, unsigned char *out);
@@ -74,32 +69,10 @@ int open_hives(char *fname[H_COUNT])
             }
         }
 
-    check_get_samdata();
+    if(NULL != hive[H_SAM])
+        max_sam_lock = sam_get_lockoutinfo(hive[H_SAM], 0);
 
     return count;
-    }
-
-/* Check if hive is SAM, and if it is, extract some
- * global policy information from it, like lockout counts etc
- */
-static void check_get_samdata(void)
-    {
-    struct keyval *v;
-    struct accountdb_F *f;
-
-    if(NULL==hive[H_SAM])
-        return;
-
-    /* Get users F value */
-    v=get_val2buf(hive[H_SAM], NULL, 0, ACCOUNTDB_F_PATH, REG_BINARY, TPF_VK);
-    if(!v)
-        {
-        logprintf("check_get_samdata: Login counts data not found in SAM!\n");
-        return;
-        }
-
-    f=(struct accountdb_F *)&v->data;
-    max_sam_lock=f->locklimit;
     }
 
 void close_hives(void)
@@ -120,13 +93,13 @@ int is_hives_dirty(void)
     {
     enum HIVE_ID i;
 
-    for(i=H_SAM; i<=H_COUNT; ++i)
+    for(i=H_SAM; i<H_COUNT; ++i)
         {
         if(NULL==hive[i])
             continue;
-	if(hive[i]->state & HMODE_DIRTY)
+        if(hive[i]->state & HMODE_DIRTY)
             return 1;
-	}
+        }
 
     return 0;
     }
@@ -135,13 +108,13 @@ int is_hives_ro(void)
     {
     enum HIVE_ID i;
 
-    for(i=H_SAM; i<=H_COUNT; ++i)
+    for(i=H_SAM; i<H_COUNT; ++i)
         {
         if(NULL==hive[i])
             continue;
-	if(hive[i]->state & HMODE_RO)
+        if(hive[i]->state & HMODE_RO)
             return 1;
-	}
+        }
 
     return 0;
     }
@@ -151,22 +124,22 @@ int write_hives(void)
     enum HIVE_ID i;
     int ret=1;
 
-    for(i=H_SAM; i<=H_COUNT; ++i)
+    for(i=H_SAM; i<H_COUNT; ++i)
         {
         if(NULL==hive[i])
             continue;
-	if(hive[i]->state & HMODE_DIRTY)
+        if(hive[i]->state & HMODE_DIRTY)
             {
             logprintf("Writing hive <%s> ", hive[i]->filename);
-	    if(0==writeHive(hive[i]))
-	        logprintf("OK\n");
+            if(0==writeHive(hive[i]))
+                logprintf("OK\n");
             else
                 {
-	        logprintf("FAILED!\n");
+                logprintf("FAILED!\n");
                 ret=0;
                 }
-	    }
-	}
+            }
+        }
 
     return ret;
     }
@@ -251,7 +224,7 @@ int is_account_locked(int rid)
     if(acb&(ACB_DISABLED|ACB_AUTOLOCK) ||
         (f->failedcnt > 0 && f->failedcnt >= max_sam_lock))
         {
-	logprintf("Account is %s\n",
+        logprintf("Account is %s\n",
             (acb & ACB_DISABLED) ? "disabled" : "probably locked out!");
         ret=1;
         }
@@ -312,9 +285,9 @@ static struct keyval *get_user_f(int rid)
         return(NULL);
         }
 
-    if(v->len!=0x50)
+    if(v->len < 0x48)
         {
-        logprintf("get_user_f: F value is 0x%x bytes, not 0x50,"
+        logprintf("get_user_f: F value is 0x%x bytes, need >= 0x48,"
             " unable to check account flags!\n", v->len);
         free(v);
         return(NULL);
@@ -345,12 +318,12 @@ int change_password(int rid, char *password)
         return 0;
         }
 
-    ret=compute_pw((char *)&v->data , rid, v->len, password);
+    ret=compute_pw((unsigned char *)&v->data , rid, v->len, password);
     if(ret)
         {
         if(!(put_buf2val(hive[H_SAM], v, 0, s, REG_BINARY, TPF_VK_EXACT)))
             {
-	     logprintf("change_password: Failed to write updated <%s> to registry!"
+             logprintf("change_password: Failed to write updated <%s> to registry!"
                 " Password change not completed!\n", s);
             ret=0;
             }
@@ -368,17 +341,18 @@ int change_password(int rid, char *password)
  * Some of this is ripped & modified from pwdump by Jeremy Allison
  * 
  */
-static int compute_pw(char *buf, int rid, int vlen, char *password)
+static int compute_pw(unsigned char *buf, int rid, int vlen, char *password)
     {
     unsigned char x1[] = {0x4B,0x47,0x53,0x21,0x40,0x23,0x24,0x25};
     int pl;
-    char *vp;
-    static char username[128],fullname[128];
-    char comment[128],homedir[128],md4[32];
+    unsigned char *vp;
+    char username[128],fullname[128];
+    char comment[128],homedir[128];
     unsigned char lanman[32];
-    char newunipw[34], newp[20], despw[20];
+    char newunipw[34], newp[20];
+    unsigned char despw[20];
     unsigned char newlanpw[16];
-    char newlandes[20];
+    unsigned char newlandes[20];
     int username_offset,username_len;
     int fullname_offset,fullname_len;
     int comment_offset,comment_len;
@@ -387,10 +361,10 @@ static int compute_pw(char *buf, int rid, int vlen, char *password)
     int all_pw_blank = 0;
     struct user_V *v;
 
-    des_key_schedule ks1, ks2;
-    des_cblock deskey1, deskey2;
+    symmetric_key sk1, sk2;
+    unsigned char deskey1[8], deskey2[8];
 
-    MD4_CTX context;
+    hash_state hs;
     unsigned char digest[16];
 
     v = (struct user_V *)buf;
@@ -435,10 +409,10 @@ static int compute_pw(char *buf, int rid, int vlen, char *password)
     ntpw_offs += 0xCC;
     lmpw_offs += 0xCC;
    
-    cheap_uni2ascii(vp + username_offset,username,username_len);
-    cheap_uni2ascii(vp + fullname_offset,fullname,fullname_len);
-    cheap_uni2ascii(vp + comment_offset,comment,comment_len);
-    cheap_uni2ascii(vp + homedir_offset,homedir,homedir_len);
+    cheap_uni2ascii((char *)(vp + username_offset),username,username_len);
+    cheap_uni2ascii((char *)(vp + fullname_offset),fullname,fullname_len);
+    cheap_uni2ascii((char *)(vp + comment_offset),comment,comment_len);
+    cheap_uni2ascii((char *)(vp + homedir_offset),homedir,homedir_len);
    
     logprintf("RID     : %04d [%04x]\n",rid,rid);
     logprintf("Username: %s\n",username);
@@ -456,40 +430,29 @@ static int compute_pw(char *buf, int rid, int vlen, char *password)
             " BLANK password!\n");
         if(lmpw_len<16)
             {
-	    logprintf("** No LANMAN hash found either. Sorry, cannot change."
+            logprintf("** No LANMAN hash found either. Sorry, cannot change."
                 " Try login with no password!\n");
-	    all_pw_blank = 1;
+            all_pw_blank = 1;
             }
         else
             {
-	    logprintf("** LANMAN password IS however set."
+            logprintf("** LANMAN password IS however set."
                 " Will now install new password as NT pass instead.\n");
-	    logprintf("** NOTE: Continue at own risk!\n");
-	    ntpw_offs = lmpw_offs;
-	    *(vp+0xa8) = ntpw_offs - 0xcc;
-	    ntpw_len = 16;
-	    lmpw_len = 0;
+            logprintf("** NOTE: Continue at own risk!\n");
+            ntpw_offs = lmpw_offs;
+            *(vp+0xa8) = ntpw_offs - 0xcc;
+            ntpw_len = 16;
+            lmpw_len = 0;
             }
         }
 
     /* Get the two decrpt keys. */
-    sid_to_key1(rid,(unsigned char *)deskey1);
-    des_set_key((des_cblock *)deskey1,ks1);
-    sid_to_key2(rid,(unsigned char *)deskey2);
-    des_set_key((des_cblock *)deskey2,ks2);
-   
-    /* Decrypt the NT md4 password hash as two 8 byte blocks. */
-    des_ecb_encrypt((des_cblock *)(vp+ntpw_offs ),
-                   (des_cblock *)md4, ks1, DES_DECRYPT);
-    des_ecb_encrypt((des_cblock *)(vp+ntpw_offs + 8),
-                   (des_cblock *)&md4[8], ks2, DES_DECRYPT);
+    sid_to_key1(rid, deskey1);
+    sid_to_key2(rid, deskey2);
 
-    /* Decrypt the lanman password hash as two 8 byte blocks. */
-    des_ecb_encrypt((des_cblock *)(vp+lmpw_offs),
-                   (des_cblock *)lanman, ks1, DES_DECRYPT);
-    des_ecb_encrypt((des_cblock *)(vp+lmpw_offs + 8),
-                   (des_cblock *)&lanman[8], ks2, DES_DECRYPT);
-      
+    des_setup(deskey1, 8, 0, &sk1);
+    des_setup(deskey2, 8, 0, &sk2);
+
     strncpy(newp, password, 16);
     newp[16]=0;
     pl=(int)strlen(newp);
@@ -500,25 +463,23 @@ static int compute_pw(char *buf, int rid, int vlen, char *password)
    
         make_lanmpw(newp,newlanpw,pl);
 
-        MD4Init (&context);
-        MD4Update (&context, newunipw, pl<<1);
-        MD4Final (digest, &context);
+        md4_init(&hs);
+        md4_process(&hs, (unsigned char *)newunipw, pl << 1);
+        md4_done(&hs, digest);
      
         E1(newlanpw,   x1, lanman);
         E1(newlanpw+7, x1, lanman+8);
      
-     
         /* Encrypt the NT md4 password hash as two 8 byte blocks. */
-        des_ecb_encrypt((des_cblock *)digest,
-                        (des_cblock *)despw, ks1, DES_ENCRYPT);
-        des_ecb_encrypt((des_cblock *)(digest+8),
-                        (des_cblock *)&despw[8], ks2, DES_ENCRYPT);
+        des_ecb_encrypt(digest, despw, &sk1);
+        des_ecb_encrypt(digest + 8, despw + 8, &sk2);
      
-        des_ecb_encrypt((des_cblock *)lanman,
-                        (des_cblock *)newlandes, ks1, DES_ENCRYPT);
-        des_ecb_encrypt((des_cblock *)(lanman+8),
-                        (des_cblock *)&newlandes[8], ks2, DES_ENCRYPT);
+        des_ecb_encrypt(lanman, newlandes, &sk1);
+        des_ecb_encrypt(lanman + 8, newlandes + 8, &sk2);
         }
+
+    des_done(&sk1);
+    des_done(&sk2);
 
     if(0==*newp)
         {
@@ -574,20 +535,19 @@ void make_lanmpw(char *p, unsigned char *lm, int len)
 
 void str_to_key(unsigned char *str,unsigned char *key)
 {
-	int i;
+        int i;
 
-	key[0] = str[0]>>1;
-	key[1] = ((str[0]&0x01)<<6) | (str[1]>>2);
-	key[2] = ((str[1]&0x03)<<5) | (str[2]>>3);
-	key[3] = ((str[2]&0x07)<<4) | (str[3]>>4);
-	key[4] = ((str[3]&0x0F)<<3) | (str[4]>>5);
-	key[5] = ((str[4]&0x1F)<<2) | (str[5]>>6);
-	key[6] = ((str[5]&0x3F)<<1) | (str[6]>>7);
-	key[7] = str[6]&0x7F;
-	for (i=0;i<8;i++) {
-		key[i] = (key[i]<<1);
-	}
-	DES_set_odd_parity((des_cblock *)key);
+        key[0] = str[0]>>1;
+        key[1] = ((str[0]&0x01)<<6) | (str[1]>>2);
+        key[2] = ((str[1]&0x03)<<5) | (str[2]>>3);
+        key[3] = ((str[2]&0x07)<<4) | (str[3]>>4);
+        key[4] = ((str[3]&0x0F)<<3) | (str[4]>>5);
+        key[5] = ((str[4]&0x1F)<<2) | (str[5]>>6);
+        key[6] = ((str[5]&0x3F)<<1) | (str[6]>>7);
+        key[7] = str[6]&0x7F;
+        for (i=0;i<8;i++) {
+                key[i] = (key[i]<<1);
+        }
 }
 
 /*
@@ -596,17 +556,17 @@ void str_to_key(unsigned char *str,unsigned char *key)
 
 void sid_to_key1(unsigned long sid,unsigned char deskey[8])
 {
-	unsigned char s[7];
+        unsigned char s[7];
 
-	s[0] = (unsigned char)(sid & 0xFF);
-	s[1] = (unsigned char)((sid>>8) & 0xFF);
-	s[2] = (unsigned char)((sid>>16) & 0xFF);
-	s[3] = (unsigned char)((sid>>24) & 0xFF);
-	s[4] = s[0];
-	s[5] = s[1];
-	s[6] = s[2];
+        s[0] = (unsigned char)(sid & 0xFF);
+        s[1] = (unsigned char)((sid>>8) & 0xFF);
+        s[2] = (unsigned char)((sid>>16) & 0xFF);
+        s[3] = (unsigned char)((sid>>24) & 0xFF);
+        s[4] = s[0];
+        s[5] = s[1];
+        s[6] = s[2];
 
-	str_to_key(s,deskey);
+        str_to_key(s,deskey);
 }
 
 /*
@@ -615,32 +575,29 @@ void sid_to_key1(unsigned long sid,unsigned char deskey[8])
 
 void sid_to_key2(unsigned long sid,unsigned char deskey[8])
 {
-	unsigned char s[7];
-	
-	s[0] = (unsigned char)((sid>>24) & 0xFF);
-	s[1] = (unsigned char)(sid & 0xFF);
-	s[2] = (unsigned char)((sid>>8) & 0xFF);
-	s[3] = (unsigned char)((sid>>16) & 0xFF);
-	s[4] = s[0];
-	s[5] = s[1];
-	s[6] = s[2];
+        unsigned char s[7];
+        
+        s[0] = (unsigned char)((sid>>24) & 0xFF);
+        s[1] = (unsigned char)(sid & 0xFF);
+        s[2] = (unsigned char)((sid>>8) & 0xFF);
+        s[3] = (unsigned char)((sid>>16) & 0xFF);
+        s[4] = s[0];
+        s[5] = s[1];
+        s[6] = s[2];
 
-	str_to_key(s,deskey);
+        str_to_key(s,deskey);
 }
 
 /* DES encrypt, for LANMAN */
 
 void E1(unsigned char *k, unsigned char *d, unsigned char *out)
 {
-  des_key_schedule ks;
-  des_cblock deskey;
+  symmetric_key sk;
+  unsigned char deskey[8];
 
-  str_to_key(k,(unsigned char *)deskey);
-#ifdef __FreeBSD__
-  des_set_key(&deskey,ks);
-#else /* __FreeBsd__ */
-  des_set_key((des_cblock *)deskey,ks);
-#endif /* __FreeBsd__ */
-  des_ecb_encrypt((des_cblock *)d,(des_cblock *)out, ks, DES_ENCRYPT);
+  str_to_key(k, deskey);
+  des_setup(deskey, 8, 0, &sk);
+  des_ecb_encrypt(d, out, &sk);
+  des_done(&sk);
 }
 

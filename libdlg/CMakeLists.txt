@@ -1,4 +1,7 @@
 PROJECT(dlglib C)
+
+ADD_DEFINITIONS(-D_WIN32_WINNT=0x0500)
+
 ADD_LIBRARY(dlglib
     ctl_button.c
     ctl_checkbox.c

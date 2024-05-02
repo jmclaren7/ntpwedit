@@ -1,5 +1,5 @@
 /* ===================================================================
- * Copyright (c) 2005-2012 Vadim Druzhin (cdslow@mail.ru).
+ * Copyright (c) 2005-2014 Vadim Druzhin (cdslow@mail.ru).
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -98,7 +98,7 @@ void *PackDialogU(
     DWORD exstyle,
     int x, int y,
     int cx, int cy,
-    WCHAR *titlestr,
+    WCHAR const *titlestr,
     int titleid,
     LOGFONTW *fnt,
     int itemcount,

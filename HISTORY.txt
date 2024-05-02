@@ -1,4 +1,12 @@
-ntpwedit - Copyright (c) 2005-2012 Vadim Druzhin (cdslow@mail.ru)
+ntpwedit - Copyright (c) 2005-2014 Vadim Druzhin (cdslow@mail.ru)
+
+* 25.11.2014 Vadim Druzhin <cdslow@mail.ru>
+  Version 0.5
+  + based on chntpw 140201
+  + OpenSSL libraries replaced by LibTomCrypt
+    (http://libtom.org/?page=features&newsitems=5&whatfile=crypt)
+  - Fixed out of bounds access in hive array
+  - Fixed inconsistent definition of _WIN32_WINNT in dlglib
 
 * 04.10.2012 Vadim Druzhin <cdslow@mail.ru>
   Version 0.4

@@ -1,6 +1,18 @@
 /*
  * ntreg.c - Windows (NT and up) Registry Hive access library
+ *           should be able to handle most basic functions:
+ *           iterate, add&delete keys and values, read stuff, change stuff etc
+ *           no rename of keys or values yet..
+ *           also contains some minor utility functions (string handling etc) for now
  * 
+ * 2014-jan: openhive() now more compatible with build on non-unix?
+ * 2013-aug: Enter buil-in buffer debugger only if in trace mode, else return error or abort()
+ * 2013-may-aug: Fixed critical bug in del_value which could
+ *           thrash the hive when removing value in bottom of key.
+ *           And a pointer not reinitialized when buffer reallocated in some cases, fixed.
+ *           Thanks to Jacky To for reporting those two.
+ *           Some minor adjustments for compiler. A few more utility functions.
+ * 2012-oct: Added set_val_type. some minor changes.
  * 2011-may: Seems like large values >16k or something like that is split
  *           into several blocks (db), have tried to implement that.
  *           Vista seems to accept it. Not tested on others yet.
@@ -43,7 +55,7 @@
  *****
  *
  * NTREG - Window registry file reader / writer library
- * Copyright (c) 1997-2010 Petter Nordahl-Hagen.
+ * Copyright (c) 1997-2014 Petter Nordahl-Hagen.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -59,11 +71,9 @@
  */ 
 
 /*
- * This file was modified by Vadim Druzhin to provide Windows compatibility.
+ * This file was modified by Vadim Druzhin to enhance Windows compatibility.
  */
 
-#define _CRT_SECURE_NO_WARNINGS
-#define _CRT_NONSTDC_NO_WARNINGS
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
@@ -72,24 +82,14 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <string.h>
-#include <stdint.h>
+#include <stdarg.h>
 
-#ifdef _WIN32
-#define bzero(a, b) memset((a), 0, (b))
-#endif /* _WIN32 */
+#include "ntreg.h"
 
 #ifdef _MSC_VER
 #include <io.h>
-#define snprintf _snprintf
 #endif /* _MSC_VER */
-
 #include "log.h"
-#undef printf
-#undef putchar
-#define printf logprintf
-#define putchar(x) logprintf("%c", (x))
-
-#include "ntreg.h"
 
 /* Set to abort() and debug on more critical errors */
 #define DOCORE 1
@@ -97,7 +97,7 @@
 #define ZEROFILL      1  /* Fill blocks with zeroes when allocating and deallocating */
 #define ZEROFILLONLOAD  0  /* Fill blocks marked as unused/deallocated with zeroes on load. FOR DEBUG */
 
-const char ntreg_version[] = "ntreg lib routines, v0.95 110511, (c) Petter N Hagen, Vadim Druzhin";
+const char ntreg_version[] = "ntreg lib routines, v0.95 140201, (c) Petter N Hagen, Vadim Druzhin";
 
 const char *val_types[REG_MAX+1] = {
   "REG_NONE", "REG_SZ", "REG_EXPAND_SZ", "REG_BINARY", "REG_DWORD",       /* 0 - 4 */
@@ -182,13 +182,37 @@ char *str_dup( const char *str )
 {
     char *str_new;
 
-    if (!str)
-        return 0 ;
+    if (!str) return(0);
 
     CREATE( str_new, char, strlen(str) + 1 );
     strcpy( str_new, str );
     return str_new;
 }
+
+char *str_cat(char *str, char *add)
+{
+  if (!add) return(str);
+  str = (char *) realloc(str, strlen(str) + strlen(add) + 3);
+  strcat (str, add);
+  return (str);
+}
+
+char *str_catf(char *str, const char *format, ... )
+{
+    va_list ap;
+    char add[640] ;
+
+    va_start(ap, format) ;
+    vsprintf(add, format, ap) ;
+    va_end(ap) ;
+
+    str = (char *) realloc(str, strlen(str) + strlen(add) + 3);
+    strcat (str, add );
+    return(str);
+}
+
+
+
 
 /* Copy non-terminated string to buffer we allocate and null terminate it
  * Uses length only, does not check for nulls
@@ -460,6 +484,44 @@ int debugit(char *buf, int sz)
 }
 
 
+/* Utility function to copy and append two values into a new one
+ * Will allocate new buffer, but not touch the input ones
+ */
+
+struct keyval *reg_valcat(struct keyval *a, struct keyval *b)
+{
+  int newsize = 0;
+  int asize = 0;
+  int bsize = 0;
+  struct keyval *result = NULL;
+
+  if (!a && !b) return(NULL);
+
+  if (a) asize = a->len;
+  if (b) bsize = b->len;
+
+  newsize = asize + bsize;
+
+  // printf("asize = %d, bsize = %d, newsize = %d\n",asize,bsize,newsize);
+
+  ALLOC(result, sizeof(struct keyval) + newsize, 1);
+
+  if (asize) memcpy(&result->data, &a->data, asize);
+  if (bsize) memcpy(&result->data + asize / sizeof(int), &b->data, bsize);
+  result->len = newsize;
+
+  //printf("reg_valcat done\n");
+
+  return(result);
+
+}
+
+
+
+
+
+
+
 /* ========================================================================= */
 
 /* The following routines are mostly for debugging, I used it
@@ -579,12 +641,12 @@ void parse_lf(struct hive *hdesc, int vofs, int blen)
 
   for(i = 0; i < key->no_keys; i++) {
     printf("%04x      %3d   Offset: 0x%0x  - <%c%c%c%c>\n", 
-	   D_OFFS(u.hash[i].ofs_nk), i,
-	   key->u.hash[i].ofs_nk + 0x1000,
-           key->u.hash[i].name[0],
-           key->u.hash[i].name[1],
-           key->u.hash[i].name[2],
-           key->u.hash[i].name[3] );
+	   D_OFFS(hash[i].ofs_nk), i,
+	   key->hash[i].ofs_nk + 0x1000,
+           key->hash[i].name[0],
+           key->hash[i].name[1],
+           key->hash[i].name[2],
+           key->hash[i].name[3] );
   }
 
   printf("== End of key info.\n");
@@ -607,9 +669,9 @@ void parse_lh(struct hive *hdesc, int vofs, int blen)
 
   for(i = 0; i < key->no_keys; i++) {
     printf("%04x      %3d   Offset: 0x%0x  - <hash: %08x>\n", 
-	   D_OFFS(u.lh_hash[i].ofs_nk), i,
-	   key->u.lh_hash[i].ofs_nk + 0x1000,
-           key->u.lh_hash[i].hash );
+	   D_OFFS(lh_hash[i].ofs_nk), i,
+	   key->lh_hash[i].ofs_nk + 0x1000,
+           key->lh_hash[i].hash );
   }
 
   printf("== End of key info.\n");
@@ -700,7 +762,7 @@ int parse_block(struct hive *hdesc, int vofs,int verbose)
 
   seglen = get_int(hdesc->buffer+vofs);
 
-  /*  if (vofs > 0xaef000) verbose = 1; */
+  //  if (vofs > 0xaef000) verbose = 1;
 
 #if 0
   if (verbose || seglen == 0) {
@@ -710,7 +772,7 @@ int parse_block(struct hive *hdesc, int vofs,int verbose)
 #endif
   if (seglen == 0) {
     printf("parse_block: FATAL! Zero data block size! (not registry or corrupt file?)\n");
-    debugit(hdesc->buffer,hdesc->size);
+    if (verbose) debugit(hdesc->buffer,hdesc->size);
     return(0);
   }
   
@@ -839,8 +901,8 @@ int find_free_blk(struct hive *hdesc, int pofs, int size)
 	printf("find_free_blk: at exact end of hbin, do not care..\n");
 	return(0);
       }
-      abort();
-      debugit(hdesc->buffer,hdesc->size);
+      if (hdesc->state & HMODE_TRACE) debugit(hdesc->buffer,hdesc->size);
+      else abort();
       return(0);
     }
     
@@ -1128,7 +1190,7 @@ int free_block(struct hive *hdesc, int blk)
     printf("free_block: trying to free already free block!\n");
 #ifdef DOCORE
       printf("blk = %x\n",blk);
-      debugit(hdesc->buffer,hdesc->size);
+      if (hdesc->state & HMODE_TRACE) debugit(hdesc->buffer,hdesc->size);
       abort();
 #endif
     return(0);
@@ -1168,7 +1230,7 @@ int free_block(struct hive *hdesc, int blk)
       printf("free_block: ran off end of page!?!? Error in chains?\n");
 #ifdef DOCORE
       printf("vofs = %x, pofs = %x, blk = %x\n",vofs,pofs,blk);
-      debugit(hdesc->buffer,hdesc->size);
+      if (hdesc->state & HMODE_TRACE) debugit(hdesc->buffer,hdesc->size);
       abort();
 #endif
       return(0);
@@ -1283,7 +1345,7 @@ int ex_next_n(struct hive *hdesc, int nkofs, int *count, int *countri, struct ex
       newnkofs = likey->hash[*count].ofs_nk + 0x1000;
     } else {
       lfkey = (struct lf_key *)( hdesc->buffer + rikey->hash[*countri].ofs_li + 0x1004 ) ;
-      newnkofs = lfkey->u.hash[*count].ofs_nk + 0x1000;
+      newnkofs = lfkey->hash[*count].ofs_nk + 0x1000;
     }
 
     /* Check if current li/lf is exhausted */
@@ -1302,7 +1364,7 @@ int ex_next_n(struct hive *hdesc, int nkofs, int *count, int *countri, struct ex
       likey = (struct li_key *)(hdesc->buffer + key->ofs_lf + 0x1004);
       newnkofs = likey->hash[*count].ofs_nk + 0x1000;
     } else {
-      newnkofs = lfkey->u.hash[*count].ofs_nk + 0x1000;
+      newnkofs = lfkey->hash[*count].ofs_nk + 0x1000;
     }
   }
 
@@ -1334,7 +1396,7 @@ int ex_next_n(struct hive *hdesc, int nkofs, int *count, int *countri, struct ex
 #endif
 
       sptr->name =  mem_str(newnkkey->keyname,newnkkey->len_name);
-      /*      sptr->name = string_rega2prog(newnkkey->keyname, newnkkey->len_name); */
+      //      sptr->name = string_rega2prog(newnkkey->keyname, newnkkey->len_name);
     } else {
       sptr->name = string_regw2prog(newnkkey->keyname, newnkkey->len_name);
     }
@@ -1392,7 +1454,7 @@ int ex_next_v(struct hive *hdesc, int nkofs, int *count, struct vex_data *sptr)
     if (vkkey->flag & 1) {
 
       sptr->name = mem_str(vkkey->keyname, vkkey->len_name);
-      /*      sptr->name = string_rega2prog(vkkey->keyname, vkkey->len_name); */
+      //      sptr->name = string_rega2prog(vkkey->keyname, vkkey->len_name);
     } else {
       sptr->name = string_regw2prog(vkkey->keyname, vkkey->len_name);
     }
@@ -1459,7 +1521,7 @@ int get_abs_path(struct hive *hdesc, int nkofs, char *path, int maxlen)
 
   if (key->type & 0x20)
     keyname = mem_str(key->keyname, key->len_name);
-  /*    keyname = string_rega2prog(key->keyname, key->len_name); */
+  //    keyname = string_rega2prog(key->keyname, key->len_name);
   else
     keyname = string_regw2prog(key->keyname, key->len_name);
   len_name = strlen(keyname);
@@ -1493,7 +1555,7 @@ int vlist_find(struct hive *hdesc, int vlistofs, int numval, char *name, int typ
   len = strlen(name);
   vlistkey = (int32_t *)(hdesc->buffer + vlistofs);
 
-  /*  printf("vlist_find: <%s> len = %d\n",name,len); */
+  //  printf("vlist_find: <%s> len = %d\n",name,len);
 
   for (i = 0; i < numval; i++) {
     vkofs = vlistkey[i] + 0x1004;
@@ -1502,7 +1564,7 @@ int vlist_find(struct hive *hdesc, int vlistofs, int numval, char *name, int typ
       return(i);
     }
 
-    /* printf("vlist_find: matching against: <%s> len = %d\n",vkkey->keyname,vkkey->len_name); */
+    // printf("vlist_find: matching against: <%s> len = %d\n",vkkey->keyname,vkkey->len_name);
 
     if ( (type & TPF_EXACT) && vkkey->len_name != len ) continue;  /* Skip if exact match and not exact size */
 
@@ -1542,7 +1604,7 @@ int trav_path(struct hive *hdesc, int vofs, char *path, int type)
   if (!hdesc) return(0);
   buf = hdesc->buffer;
 
-  /*  printf("trav_path: called with vofs = %x, path = <%s>, type = %x\n",vofs, path, type); */
+  //  printf("trav_path: called with vofs = %x, path = <%s>, type = %x\n",vofs, path, type);
 
 
   if (!vofs) vofs = hdesc->rootofs+4;     /* No current key given , so start at root */
@@ -1553,7 +1615,7 @@ int trav_path(struct hive *hdesc, int vofs, char *path, int type)
   }
 
   key = (struct nk_key *)(buf + vofs);
-  /*  printf("check of nk at offset: 0x%0x\n",vofs); */
+  //  printf("check of nk at offset: 0x%0x\n",vofs); 
 
   if (key->id != 0x6b6e) {
     printf("trav_path: Error: Not a 'nk' node!\n");
@@ -1579,12 +1641,12 @@ int trav_path(struct hive *hdesc, int vofs, char *path, int type)
 #endif
 
     adjust = (path[plen] == '\\' ) ? 1 : 0;
-    /* printf("Checking for <%s> with len %d\n",path,plen); */
+    // printf("Checking for <%s> with len %d\n",path,plen); 
 
     if (!plen) return(vofs-4);     /* Path has no lenght - we're there! */
 
     if ( (plen == 1) && (*(path+1) && *path == '.') && !(type & TPF_EXACT)) {     /* Handle '.' current dir */
-      /*  printf("** handle current\n"); */
+      //  printf("** handle current\n");
       return(trav_path(hdesc,vofs,path+plen+adjust,type));
     }
     if ( !(type & TPF_EXACT) && (plen == 2) && !strncmp("..",path,2) ) { /* Get parent key */
@@ -1597,14 +1659,14 @@ int trav_path(struct hive *hdesc, int vofs, char *path, int type)
 
   /* at last name of path, and we want vk, and the nk has values */
   if ((type & TPF_VK_ABS) || (!path[plen] && (type & TPF_VK) && key->no_values) ) {   
-    /*  if ( (!path[plen] && (type & TPF_VK) && key->no_values) ) {   */
+    //  if ( (!path[plen] && (type & TPF_VK) && key->no_values) ) {   
     if (type & TPF_ABS) {
       strcpy(part, path);
       plen = de_escape(part,0);
       partptr = part + plen;
     }
 
-    /*  printf("VK namematch for <%s>, type = %d\n",part,type); */
+    //  printf("VK namematch for <%s>, type = %d\n",part,type);
     vlistofs = key->ofs_vallist + 0x1004;
     vlistkey = (int32_t *)(buf + vlistofs);
     i = vlist_find(hdesc, vlistofs, key->no_values, part, type);
@@ -1617,7 +1679,7 @@ int trav_path(struct hive *hdesc, int vofs, char *path, int type)
     char *partw = NULL;
     int partw_len, part_len;
 
-    /* printf("trav_path: subkey loop: path = %s, part = %s\n",path,part); */
+    // printf("trav_path: subkey loop: path = %s, part = %s\n",path,part);
 
     lfofs = key->ofs_lf + 0x1004;    /* lf (hash) record */
     lfkey = (struct lf_key *)(buf + lfofs);
@@ -1645,12 +1707,12 @@ int trav_path(struct hive *hdesc, int vofs, char *path, int type)
     }
 
     partw = string_prog2regw(part, partptr-part, &partw_len);
-    /*    string_prog2rega(part, partptr-part); */
+    //    string_prog2rega(part, partptr-part);
     part_len = strlen(part);
     do {
       for(i = 0; i < subs; i++) {
 	if (likey) newnkofs = likey->hash[i].ofs_nk + 0x1004;
-	else newnkofs = lfkey->u.hash[i].ofs_nk + 0x1004;
+	else newnkofs = lfkey->hash[i].ofs_nk + 0x1004;
 	newnkkey = (struct nk_key *)(buf + newnkofs);
 	if (newnkkey->id != 0x6b6e) {
 	  printf("ERROR: not 'nk' node! (strange?)\n");
@@ -1663,13 +1725,13 @@ int trav_path(struct hive *hdesc, int vofs, char *path, int type)
 		      ) {
 	    /* Can't match if name is shorter than we look for */
             int cmp;
-	    /*	    printf("trav_path: part = <%s>, part_len = %d\n",part,part_len); */
+	    //	    printf("trav_path: part = <%s>, part_len = %d\n",part,part_len);
 	    if (newnkkey->type & 0x20) 
               cmp = strncmp(part,newnkkey->keyname,part_len);
             else
               cmp = memcmp(partw, newnkkey->keyname, partw_len);
 	    if (!cmp) {
-	      /*  printf("Key at 0x%0x matches! recursing! new path = %s\n",newnkofs,path+plen+adjust); */
+	      //  printf("Key at 0x%0x matches! recursing! new path = %s\n",newnkofs,path+plen+adjust); 
 	      free(partw);
 	      return(trav_path(hdesc, newnkofs, path+plen+adjust, type));
 	    }
@@ -1721,9 +1783,9 @@ void nk_ls(struct hive *hdesc, char *path, int vofs, int type)
   VERBF(hdesc,"ls of node at offset 0x%0x\n",nkofs);
 
   if (key->id != 0x6b6e) {
-    printf("Error: Not a 'nk' node!\n");
+    printf("Error: Not a 'nk' node at offset %x!\n",nkofs);
 
-    debugit(hdesc->buffer,hdesc->size);
+    if (hdesc->state & HMODE_TRACE) debugit(hdesc->buffer,hdesc->size);
     
   }
   
@@ -1741,13 +1803,13 @@ void nk_ls(struct hive *hdesc, char *path, int vofs, int type)
   }
   count = 0;
   if (key->no_values) {
-    printf("  size     type            value name             [value if type DWORD]\n");
+    printf("  size     type              value name             [value if type DWORD]\n");
     while ((ex_next_v(hdesc, nkofs, &count, &vex) > 0)) {
-      if (hdesc->state & HMODE_VERBOSE) printf("[%6x] %6d  %-16s  <%s>", vex.vkoffs - 4, vex.size,
+      if (hdesc->state & HMODE_VERBOSE) printf("[%6x] %6d  %x %-16s   <%s>", vex.vkoffs - 4, vex.size, vex.type,
 					       (vex.type < REG_MAX ? val_types[vex.type] : "(unknown)"), vex.name);
       else
-      printf("%6d  %-16s  <%s>", vex.size,
-	     (vex.type < REG_MAX ? val_types[vex.type] : "(unknown)"), vex.name);
+	printf("%6d  %x %-16s   <%s>", vex.size, vex.type,
+	       (vex.type < REG_MAX ? val_types[vex.type] : "(unknown)"), vex.name);
 
       if (vex.type == REG_DWORD) printf(" %*d [0x%x]",25-(int)strlen(vex.name),vex.val , vex.val);
       printf("\n");
@@ -1771,6 +1833,27 @@ int get_val_type(struct hive *hdesc, int vofs, char *path, int exact)
 
   return(vkkey->val_type);
 }
+
+/* Set/change the type of a value. Strangely we need this in some situation in SAM
+ * and delete + add value is a bit overkill */
+
+int set_val_type(struct hive *hdesc, int vofs, char *path, int exact, int type)
+{
+  struct vk_key *vkkey;
+  int vkofs;
+
+  vkofs = trav_path(hdesc, vofs,path,exact | TPF_VK);
+  if (!vkofs) {
+    return -1;
+  }
+  vkofs +=4;
+  vkkey = (struct vk_key *)(hdesc->buffer + vkofs);
+
+  vkkey->val_type = type;
+
+  return(vkkey->val_type);
+}
+
 
 
 /* Get len of a value, given current key + path */
@@ -1805,7 +1888,7 @@ void *get_val_data(struct hive *hdesc, int vofs, char *path, int val_type, int e
   struct vk_key *vkkey;
   int vkofs;
 
-  /*  printf("get_val_data: path = %s\n",path); */
+  //  printf("get_val_data: path = %s\n",path);
 
   vkofs = trav_path(hdesc,vofs,path,exact | TPF_VK);
   if (!vkofs) {
@@ -1862,7 +1945,7 @@ struct keyval *get_val2buf(struct hive *hdesc, struct keyval *kv,
   if (kv && (kv->len < l)) return(NULL); /* Check for overflow of supplied buffer */
 
   keydataptr = get_val_data(hdesc, vofs, path, type, exact);
-  /*  if (!keydataptr) return(NULL); */
+  //  if (!keydataptr) return(NULL);
 
   /* Allocate space for data + header, or use supplied buffer */
   if (kv) {
@@ -1873,7 +1956,7 @@ struct keyval *get_val2buf(struct hive *hdesc, struct keyval *kv,
 
   kr->len = l;
 
-  /* printf("get_val2buf: keydataprtr = %x, l = %x\n",keydataptr,l); */
+  // printf("get_val2buf: keydataprtr = %x, l = %x\n",keydataptr,l);
 
 
   if (l > VAL_DIRECT_LIMIT) {       /* Where do the db indirects start? seems to be around 16k */
@@ -1898,7 +1981,7 @@ struct keyval *get_val2buf(struct hive *hdesc, struct keyval *kv,
       addr = (char *)&(kr->data) + point;
       memcpy( addr, hdesc->buffer + blockofs + 4, copylen);
 
-      /*      debugit((char *)&(kr->data), l); */
+      //      debugit((char *)&(kr->data), l);
       
       point += copylen;
       restlen -= copylen;
@@ -1950,7 +2033,7 @@ int fill_block(struct hive *hdesc, int ofs, void *data, int size)
   /*  if (blksize < size || ( (ofs & 0xfffff000) != ((ofs+size) & 0xfffff000) )) { */
   if (blksize < size) {
     printf("fill_block: ERROR: block to small for data: ofs = %x, size = %x, blksize = %x\n",ofs,size,blksize);
-    debugit(hdesc->buffer,hdesc->size);
+    if (hdesc->state & HMODE_TRACE) debugit(hdesc->buffer,hdesc->size);
     abort();
   }
 
@@ -2071,7 +2154,7 @@ int alloc_val_data(struct hive *hdesc, int vofs, char *path, int size,int exact)
 
 
   } else { /* 4 bytes or less are inlined */
-    datablk = vkofs + (int32_t)&(vkkey->ofs_data) - (int32_t)vkkey;
+    datablk = vkofs + (intptr_t)&(vkkey->ofs_data) - (intptr_t)vkkey;
     size |= 0x80000000;
   }
 
@@ -2079,7 +2162,7 @@ int alloc_val_data(struct hive *hdesc, int vofs, char *path, int size,int exact)
 
   vkkey = (struct vk_key *)(hdesc->buffer + vkofs); /* alloc_block may move pointer, realloc() buf */
 
-  /* printf("alloc_val_data: datablk = %x, size = %x, vkkey->len_data = %x\n",datablk, size, vkkey->len_data); */
+  // printf("alloc_val_data: datablk = %x, size = %x, vkkey->len_data = %x\n",datablk, size, vkkey->len_data);
 
 
 
@@ -2302,7 +2385,7 @@ int del_value(struct hive *hdesc, int nkofs, char *name, int exact)
 
     /* Now copy over, omitting deleted entry */
     newlistkey = (int32_t *)(hdesc->buffer + newlistofs + 4);
-    for (n = 0, o = 0; o < nk->no_values+1; o++, n++) {
+    for (n = 0, o = 0; n < nk->no_values; o++, n++) {
       if (o == slot) o++;
       newlistkey[n] = tmplist[o];
     }
@@ -2445,7 +2528,7 @@ struct nk_key *add_key(struct hive *hdesc, int nkofs, char *name)
 	
 	/* Now copy old, checking where to insert (alphabetically) */
 	for (o = 0, n = 0; o < oldlf->no_keys; o++,n++) {
-	  onkofs = oldlf->u.hash[o].ofs_nk;
+	  onkofs = oldlf->hash[o].ofs_nk;
 	  onk = (struct nk_key *)(onkofs + hdesc->buffer + 0x1004);
 	  if (slot == -1) {
 
@@ -2467,11 +2550,11 @@ struct nk_key *add_key(struct hive *hdesc, int nkofs, char *name)
 #endif
 	    }
 	  }
-	  newlf->u.hash[n].ofs_nk = oldlf->u.hash[o].ofs_nk;
-	  newlf->u.hash[n].name[0] = oldlf->u.hash[o].name[0];
-	  newlf->u.hash[n].name[1] = oldlf->u.hash[o].name[1];
-	  newlf->u.hash[n].name[2] = oldlf->u.hash[o].name[2];
-	  newlf->u.hash[n].name[3] = oldlf->u.hash[o].name[3];
+	  newlf->hash[n].ofs_nk = oldlf->hash[o].ofs_nk;
+	  newlf->hash[n].name[0] = oldlf->hash[o].name[0];
+	  newlf->hash[n].name[1] = oldlf->hash[o].name[1];
+	  newlf->hash[n].name[2] = oldlf->hash[o].name[2];
+	  newlf->hash[n].name[3] = oldlf->hash[o].name[3];
 	}
 	if (slot == -1) slot = oldlf->no_keys;
       } /* li else check */
@@ -2546,20 +2629,20 @@ struct nk_key *add_key(struct hive *hdesc, int nkofs, char *name)
     printf("add_key: lf/lh fill at slot: %d, rislot: %d\n",slot,rislot);
 #endif
     /* And put its offset into parents index list */
-    newlf->u.hash[slot].ofs_nk = newnkofs - 0x1000;
+    newlf->hash[slot].ofs_nk = newnkofs - 0x1000;
     newlf->no_keys++;
     if (newlf->id == 0x666c) {        /* lf hash */
-      newlf->u.hash[slot].name[0] = 0;
-      newlf->u.hash[slot].name[1] = 0;
-      newlf->u.hash[slot].name[2] = 0;
-      newlf->u.hash[slot].name[3] = 0;
-      strncpy(newlf->u.hash[slot].name, name, 4);
+      newlf->hash[slot].name[0] = 0;
+      newlf->hash[slot].name[1] = 0;
+      newlf->hash[slot].name[2] = 0;
+      newlf->hash[slot].name[3] = 0;
+      strncpy(newlf->hash[slot].name, name, 4);
     } else if (newlf->id == 0x686c) {  /* lh. XP uses this. hashes whole name */
       for (i = 0,hash = 0; i < strlen(name); i++) {
 	hash *= 37;
 	hash += reg_touppertable[(unsigned char)name[i]];
       }
-      newlf->u.lh_hash[slot].hash = hash;
+      newlf->lh_hash[slot].hash = hash;
     }
     
     /* Allocate space for our new lf list and copy it into reg */
@@ -2629,7 +2712,7 @@ int del_key(struct hive *hdesc, int nkofs, char *name)
 
 
   if (key->id != 0x6b6e) {
-    printf("add_key: current ptr not nk\n");
+    printf("del_key: current ptr not nk\n");
     return(1);
   }
 
@@ -2720,7 +2803,7 @@ int del_key(struct hive *hdesc, int nkofs, char *name)
       /* Now copy old, checking where to delete */
       for (o = 0, n = 0; o < oldlf->no_keys; o++,n++) {
 
-	onkofs = oldlf->u.hash[o].ofs_nk;
+	onkofs = oldlf->hash[o].ofs_nk;
 	onk = (struct nk_key *)(onkofs + hdesc->buffer + 0x1004);
 
 	if (slot == -1 && (onk->len_name == namlen) && !strncmp(name, onk->keyname, onk->len_name)) {
@@ -2734,11 +2817,11 @@ int del_key(struct hive *hdesc, int nkofs, char *name)
 #ifdef DKDEBUG
 	  printf("del_key: n = %d, o = %d\n",n,o);
 #endif
-	  newlf->u.hash[n].ofs_nk = oldlf->u.hash[o].ofs_nk;
-	  newlf->u.hash[n].name[0] = oldlf->u.hash[o].name[0];
-	  newlf->u.hash[n].name[1] = oldlf->u.hash[o].name[1];
-	  newlf->u.hash[n].name[2] = oldlf->u.hash[o].name[2];
-	  newlf->u.hash[n].name[3] = oldlf->u.hash[o].name[3];
+	  newlf->hash[n].ofs_nk = oldlf->hash[o].ofs_nk;
+	  newlf->hash[n].name[0] = oldlf->hash[o].name[0];
+	  newlf->hash[n].name[1] = oldlf->hash[o].name[1];
+	  newlf->hash[n].name[2] = oldlf->hash[o].name[2];
+	  newlf->hash[n].name[3] = oldlf->hash[o].name[3];
 	}
 
       }
@@ -2767,6 +2850,13 @@ int del_key(struct hive *hdesc, int nkofs, char *name)
   /* Allocate space for our new lf list and copy it into reg */
   if ( no_keys && (newlf || newli) ) {
     newlfofs = alloc_block(hdesc, nkofs, 8 + (newlf ? 8 : 4) * no_keys);
+
+    /* alloc_block may invalidate pointers if hive expanded. Recalculate this one.
+     * Thanks to Jacky To for reporting it here, and suggesting a fix
+     * (better would of course be for me to redesign stuff :)
+     */ 
+    if (delnkofs) delnk = (struct nk_key *)(delnkofs + hdesc->buffer + 0x1004);
+
 #ifdef DKDEBUG
     printf("del_key: alloc_block for index returns: %x\n",newlfofs);
 #endif
@@ -2795,7 +2885,7 @@ int del_key(struct hive *hdesc, int nkofs, char *name)
   if (newlfofs < 0xfff) {
     printf("del_key: ERROR: newlfofs = %x\n",newlfofs);
 #if DOCORE
-    debugit(hdesc->buffer,hdesc->size);
+    if (hdesc->state & HMODE_TRACE) debugit(hdesc->buffer,hdesc->size);
     abort();
 #endif
   }
@@ -2898,10 +2988,10 @@ void rdel_keys(struct hive *hdesc, char *path, int vofs)
   */
 
   if (key->id != 0x6b6e) {
-    printf("Error: Not a 'nk' node!\n");
+    printf("rdel_keys: ERROR: Not a 'nk' node!\n");
 
-    debugit(hdesc->buffer,hdesc->size);
-    
+    if (hdesc->state & HMODE_TRACE) debugit(hdesc->buffer,hdesc->size);
+    return;
   }
   
 #if 0
@@ -2991,9 +3081,9 @@ int put_buf2val(struct hive *hdesc, struct keyval *kv,
 
   l = get_val_len(hdesc, vofs, path, exact);
   if (l == -1) return(0);  /* error */
-  /*  printf("put_buf2val: l = %d\n",l); */
+  //  printf("put_buf2val: l = %d\n",l);
 
-  /*  printf("put_buf2val: %s, kv len = %d, l = %d\n",path,kv->len,l); */
+  //  printf("put_buf2val: %s, kv len = %d, l = %d\n",path,kv->len,l);
 
 
   if (kv->len != l) {  /* Realloc data block if not same size as existing */
@@ -3033,7 +3123,7 @@ int put_buf2val(struct hive *hdesc, struct keyval *kv,
       addr = (char *)&(kv->data) + point;
       fill_block( hdesc, blockofs, addr, copylen);
 
-      /*      debugit((char *)&(kr->data), l); */
+      //      debugit((char *)&(kr->data), l);
       
       point += copylen;
       restlen -= copylen;
@@ -3121,7 +3211,7 @@ string_regw2prog(void *string, int len)
     return cstring;
 }
 
-#if 0        /* Not used at the moment */
+#if 0        // Not used at the moment
 static char *
 string_rega2prog(void *string, int len)
 {
@@ -3174,7 +3264,7 @@ string_prog2rega(char *string, int len)
     }
     *out = 0;
 }
-#endif  /* Not used */
+#endif  // Not used
 
 
 static char *
@@ -3272,7 +3362,7 @@ void export_subkey(struct hive *hdesc, int nkofs, char *name, char *prefix, FILE
     struct vex_data vex;
 
 
-    /* switch to key */
+    // switch to key
     newofs = trav_path(hdesc, nkofs, name, TPF_NK_EXACT);
     if(!newofs)
     {
@@ -3282,7 +3372,7 @@ void export_subkey(struct hive *hdesc, int nkofs, char *name, char *prefix, FILE
     }
     nkofs = newofs + 4;
 
-    /* get the key */
+    // get the key
     key = (struct nk_key *)(hdesc->buffer + nkofs);
     printf("Exporting key '%.*s' with %d subkeys and %d values...\n",
             key->len_name, key->keyname, key->no_subkeys, key->no_values);
@@ -3290,10 +3380,10 @@ void export_subkey(struct hive *hdesc, int nkofs, char *name, char *prefix, FILE
     *path = 0;
     get_abs_path(hdesc, nkofs, path, 1024);
 
-    /* export the key */
+    // export the key
     fprintf(file, "\r\n");
-    fprintf(file, "[%s\\%s]\r\n", prefix, path);
-    /* export values */
+    fprintf(file, "[%s\%s]\r\n", prefix, path);
+    // export values
     if(key->no_values)
     {
         while ((ex_next_v(hdesc, nkofs, &count, &vex) > 0))
@@ -3327,7 +3417,7 @@ void export_subkey(struct hive *hdesc, int nkofs, char *name, char *prefix, FILE
                 if (strchr(val, 0xa) || strchr(val, 0xd))
                 {
                     free(val);
-                    /*if (len >= 2 && value[len-2] == 0 && value[len-1] == 0) len -= 2; */
+                    //if (len >= 2 && value[len-2] == 0 && value[len-1] == 0) len -= 2;
                     export_bin(vex.type, value, len, col, file);
                 }
                 else
@@ -3364,7 +3454,7 @@ void export_subkey(struct hive *hdesc, int nkofs, char *name, char *prefix, FILE
         }
     }
 
-    /* export subkeys */
+    // export subkeys
     if (key->no_subkeys)
     {
         count = 0;
@@ -3395,7 +3485,7 @@ void export_key(struct hive *hdesc, int nkofs, char *name, char *filename, char 
 {
     FILE *file;
 
-    /* open file */
+    // open file
     file = fopen(filename, "w");
     if(!file)
     {
@@ -3450,14 +3540,14 @@ char *my_fgets(char *s, char *w, int max, FILE *file, int wide)
 
   if (wide) {  /* Convert to C string, de widing it.. */
     cheap_uni2ascii(w, s, i);
-    /* printf("cheap returns len = %d : %s\n",strlen(s), s); */
+    // printf("cheap returns len = %d : %s\n",strlen(s), s);
 
     fgetc(file);  /* Skip second byte of CR/LF termination */
   }
 
-  /*  printf("my_fgets returning :\n"); */
-  /*hexdump(w, 0, i, 1); */
-  /*printf("====== hexdump end\n"); */
+  //  printf("my_fgets returning :\n");
+  //hexdump(w, 0, i, 1);
+  //printf("====== hexdump end\n");
   return(s);
 
 }
@@ -3668,11 +3758,11 @@ int parse_valuestring(char *s, char *w, int len, int wide, struct keyval **kvptr
   struct keyval *kv = NULL;
   
 
-  /*  printf("parse_val: input string: <%s>\n",s); */
+  //  printf("parse_val: input string: <%s>\n",s);
 
   if (!strncmp(s,"dword",4)) {  /* DWORD */
     sscanf(s,"dword:%x",&dword);
-    /*    printf("parse_vals: dword is %x\n",dword); */
+    //    printf("parse_vals: dword is %x\n",dword);
     type = REG_DWORD;
     len = 4;
     ALLOC(kv,1,len + 8);
@@ -3681,14 +3771,14 @@ int parse_valuestring(char *s, char *w, int len, int wide, struct keyval **kvptr
   } else if (!strncmp(s,"hex",3)) { /* Hex string */
     if (!sscanf(s,"hex(%x):",&type)) type = REG_BINARY;
 
-    /*   printf("parse_vals: hex type is %d\n",type); */
+    //   printf("parse_vals: hex type is %d\n",type);
 
     while (*s && *s != ':') s++;   /* Move up to : */
     s++;
     len = strlen(s);
     if (len > 0) len = len / 3 + 1;           /* 3 characters per byte */
 
-    /* printf("parse_vals: hex byte count %d\n", len); */
+    // printf("parse_vals: hex byte count %d\n", len);
 
     ALLOC(kv,1,len + 8);
     array = (uint8_t *)&kv->data;
@@ -3698,7 +3788,7 @@ int parse_valuestring(char *s, char *w, int len, int wide, struct keyval **kvptr
 	fprintf(stderr,"parse_values: hex string parse error: %s\n",s);
 	abort();
       }
-      /*      printf("parse_vals: adding byte: %02x\n",byte); */
+      //      printf("parse_vals: adding byte: %02x\n",byte);
       *(array+i) = byte;
       s += 3;
     }
@@ -3726,13 +3816,13 @@ int parse_valuestring(char *s, char *w, int len, int wide, struct keyval **kvptr
       i += 2;
 
 
-      /*      hexdump(w+strstart,0,i-strstart,1); */
+      //      hexdump(w+strstart,0,i-strstart,1);
 
       len = de_escape(w + strstart, wide);
 
-      /*      hexdump(w+strstart,0,len,1); */
+      //      hexdump(w+strstart,0,len,1);
 
-      /*      printf("wide string: i = %d, strstart = %d, len = %d\n",i,strstart,len); */
+      //      printf("wide string: i = %d, strstart = %d, len = %d\n",i,strstart,len);
 
       ALLOC(kv,1,len + 8);
 
@@ -3741,13 +3831,13 @@ int parse_valuestring(char *s, char *w, int len, int wide, struct keyval **kvptr
     } else {       /* File is not wide, so we must widen string before putting into registry */
 
       len = strlen(s);
-      /*      printf("parse_vals: len %d string <%s>\n",len,s); */
+      //      printf("parse_vals: len %d string <%s>\n",len,s);
       len = de_escape(s, 0);
-      /* printf("parse_vals: after de-escape len %d string <%s>\n",len,s); */
+      // printf("parse_vals: after de-escape len %d string <%s>\n",len,s);
 
       widebuf = string_prog2regw(s, strlen(s), &len);      
       len += 2;  /* Also store the terminating NULLs */
-      /* printf("parse_vals: len after wide expansion: %d\n",len); */
+      // printf("parse_vals: len after wide expansion: %d\n",len);
       
       ALLOC(kv,1,len + 8);
       memcpy(&kv->data,widebuf,len);
@@ -3791,7 +3881,7 @@ void import_reg(struct hive *hdesc, char *filename, char *prefix)
     char *value = NULL;
     int wide = 0;
     int c,wl;
-    void *valbuf;
+    //    void *valbuf;
     char *valname = NULL;
     char *plainname = NULL;
     char *valstr, *key, *walstr = NULL;
@@ -3841,7 +3931,7 @@ void import_reg(struct hive *hdesc, char *filename, char *prefix)
      l = get_line(line, wline, file, &assigner, &value, wide);
 
      if (!feof(file) && !assigner && value) {
-       /*	printf("import_reg: value continuation line: %s\n",value); */
+       //	printf("import_reg: value continuation line: %s\n",value);
 	l = strlen(value);
 	if ( *(value+l-1) == '\\' ) {  /* Strip off cont character */
 	  *(value+l-1) = 0;
@@ -3855,7 +3945,7 @@ void import_reg(struct hive *hdesc, char *filename, char *prefix)
 	  abort();
 	}
 	strcat(valstr, value);
-	/*	printf("import_reg: build value string: %s\n",valstr); */
+	//	printf("import_reg: build value string: %s\n",valstr);
 	if (wide) {
 	  wl = wide_strlen(wline);
 	  walstr = realloc(walstr, wide_strlen(walstr) + wl + 4);
@@ -3870,12 +3960,12 @@ void import_reg(struct hive *hdesc, char *filename, char *prefix)
 
      } else {    /* End continuation, store built up value */
        if (valname) {
-	 /*	 printf("import_reg: end of value %s, result string: %s\n\n",valname,valstr); */
+	 //	 printf("import_reg: end of value %s, result string: %s\n\n",valname,valstr);
 
 	 type = parse_valuestring(valstr, walstr, l, wide, &valbinbuf);
 
-	 /*	 printf("import_reg: got value type = %d\n",type); */
-	 /*      printf("import_reg: data lenght    = %d\n",(*valbinbuf).len); */
+	 //	 printf("import_reg: got value type = %d\n",type);
+	 //      printf("import_reg: data lenght    = %d\n",(*valbinbuf).len);
 
 	 VERBF(hdesc,"  Value <%s> of type %d length %d",valname,type,(*valbinbuf).len);
 
@@ -3883,10 +3973,10 @@ void import_reg(struct hive *hdesc, char *filename, char *prefix)
 
 
 	 if (oldtype == -1) {
-	   /*	   printf("Value <%s> not found, creating it new\n",valname); */
+	   //	   printf("Value <%s> not found, creating it new\n",valname);
 	   plainname = str_dup(valname);
 	   de_escape(plainname,0);
-	   /* printf("de-escaped to <%s> creating it new\n",plainname); */
+	   // printf("de-escaped to <%s> creating it new\n",plainname);
 	   add_value(hdesc, nk + 4, plainname, type);
 	   oldtype = get_val_type(hdesc, nk + 4, valname, TPF_VK_ABS|TPF_EXACT);
 	   FREE(plainname);
@@ -3915,7 +4005,7 @@ void import_reg(struct hive *hdesc, char *filename, char *prefix)
      
 
      if (assigner && !value) {      /* Its a key line */
-       /*printf("import_reg: read key name: %s\n",assigner); */
+       //printf("import_reg: read key name: %s\n",assigner);
 	if ( !strncmp(assigner,prefix,plen)) { /* Check and strip of prefix of key name */
 	  assigner += plen;
 	} else {
@@ -3957,7 +4047,7 @@ void import_reg(struct hive *hdesc, char *filename, char *prefix)
 	    
 
      if (assigner && value) { 
-       /* printf("import_reg: value assignment line: %s = %s\n",assigner,value); */
+       // printf("import_reg: value assignment line: %s = %s\n",assigner,value);
        valname = str_dup(dequote(assigner));
        if (wide) {
 	 FREE(walstr);
@@ -3972,9 +4062,9 @@ void import_reg(struct hive *hdesc, char *filename, char *prefix)
        }
        value = dequote(value);
        valstr = str_dup(value);
-       valbuf = NULL;
-       /*printf("import_reg: val name = %s\n",valname); */
-       /*printf("import_reg: val str  = %s\n",valstr); */
+       //       valbuf = NULL;
+       //printf("import_reg: val name = %s\n",valname);
+       //printf("import_reg: val str  = %s\n",valstr);
        
      }
      
@@ -4006,7 +4096,7 @@ void import_reg(struct hive *hdesc, char *filename, char *prefix)
 void closeHive(struct hive *hdesc)
 {
 
-  /*  printf("closing hive %s\n",hdesc->filename); */
+  //  printf("closing hive %s\n",hdesc->filename);
   if (hdesc->state & HMODE_OPEN) {
     close(hdesc->filedesc);
   }
@@ -4039,7 +4129,8 @@ int32_t calc_regfsum(struct hive *hdesc)
 
 
 
-/* Write the hive back to disk (only if dirty & not readonly */
+/* Write the hive back to disk (only if dirty & not readonly) */
+
 int writeHive(struct hive *hdesc)
 {
   int len;
@@ -4086,6 +4177,7 @@ struct hive *openHive(char *filename, int mode)
   uint32_t pofs;
   int32_t checksum;
   char *c;
+  int rt;
   struct hbin_page *p;
   struct regf_header *hdr;
   struct nk_key *nk;
@@ -4093,6 +4185,9 @@ struct hive *openHive(char *filename, int mode)
 
   int verbose = (mode & HMODE_VERBOSE);
   int trace   = (mode & HMODE_TRACE) ? 1 : 0;
+  int info    = (mode & HMODE_INFO);
+
+  if (!filename || !*filename) return(NULL);
 
   CREATE(hdesc,struct hive,1);
 
@@ -4102,10 +4197,16 @@ struct hive *openHive(char *filename, int mode)
   hdesc->buffer = NULL;
 
   if ( (mode & HMODE_RO) ) {
-    fmode = O_RDONLY|O_BINARY;
+    fmode = O_RDONLY;
   } else {
-    fmode = O_RDWR|O_BINARY;
+    fmode = O_RDWR;
   }
+
+  /* Some non-unix platforms may need this. Thanks to Dan Schmidt */
+#ifdef O_BINARY
+  fmode |= O_BINARY;
+#endif
+
   hdesc->filedesc = open(hdesc->filename,fmode);
   if (hdesc->filedesc < 0) {
     fprintf(stderr,"openHive(%s) failed: %s, trying read-only\n",hdesc->filename,strerror(errno));
@@ -4127,14 +4228,23 @@ struct hive *openHive(char *filename, int mode)
 
   hdesc->size = sbuf.st_size;
   hdesc->state = mode | HMODE_OPEN;
-  /*  fprintf(stderr,"hiveOpen(%s) successful\n",hdesc->filename); */
-  
+
   /* Read the whole file */
 
   ALLOC(hdesc->buffer,1,hdesc->size);
 
-  r = read(hdesc->filedesc,hdesc->buffer,hdesc->size);
-  if (r < hdesc->size) {
+  rt = 0;
+  do {  /* On some platforms read may not block, and read in chunks. handle that */
+    r = read(hdesc->filedesc, hdesc->buffer + rt, hdesc->size - rt);
+    rt += r;
+  } while ( !errno && (rt < hdesc->size) );
+
+  if (errno) { 
+    perror("openHive(): read error: ");
+    closeHive(hdesc);
+    return(NULL);
+  }
+  if (rt < hdesc->size) {
     fprintf(stderr,"Could not read file, got %d bytes while expecting %d\n",
 	    r, hdesc->size);
     closeHive(hdesc);
@@ -4162,13 +4272,13 @@ struct hive *openHive(char *filename, int mode)
      fprintf(stderr,"openHive(%s): WARNING: REGF header checksum mismatch! calc: 0x%08x != file: 0x%08x\n",filename,checksum,hdr->checksum);
    }
 
-
-
-   printf("Hive <%s> name (from header): <",filename);
-   for (c = hdr->name; *c && (c < hdr->name + 64); c += 2) putchar(*c);
-
    hdesc->rootofs = hdr->ofs_rootkey + 0x1000;
-   printf(">\nROOT KEY at offset: 0x%06x * ",hdesc->rootofs);
+
+   if (info) {
+     printf("Hive <%s> name (from header): <",filename);
+     for (c = hdr->name; *c && (c < hdr->name + 64); c += 2) putchar(*c);
+     printf(">\nROOT KEY at offset: 0x%06x * ",hdesc->rootofs);
+   }
 
    /* Cache the roots subkey index type (li,lf,lh) so we can use the correct
     * one when creating the first subkey in a key */
@@ -4178,7 +4288,7 @@ struct hive *openHive(char *filename, int mode)
      rikey = (struct ri_key *)(hdesc->buffer + nk->ofs_lf + 0x1004);
      hdesc->nkindextype = rikey->id;
      if (hdesc->nkindextype == 0x6972) {  /* Gee, big root, must check indirectly */
-       printf("openHive: DEBUG: BIG ROOT!\n");
+       fprintf(stderr,"openHive: DEBUG: BIG ROOT!\n");
        rikey = (struct ri_key *)(hdesc->buffer + rikey->hash[0].ofs_li + 0x1004);
        hdesc->nkindextype = rikey->id;
      }
@@ -4188,7 +4298,7 @@ struct hive *openHive(char *filename, int mode)
        hdesc->nkindextype = 0x666c;
      }
 
-     printf("Subkey indexing type is: %04x <%c%c>\n",
+     if (info) printf("Subkey indexing type is: %04x <%c%c>\n",
 	    hdesc->nkindextype,
 	    hdesc->nkindextype & 0xff,
 	    hdesc->nkindextype >> 8);
@@ -4200,11 +4310,11 @@ struct hive *openHive(char *filename, int mode)
    while (pofs < hdr->filesize + 0x1000) {   /* Loop through hbins until end according to regf header */
 #ifdef LOAD_DEBUG
      int htrace = 1;
-     /*     if (htrace) hexdump(hdesc->buffer,pofs,pofs+0x20,1); */
+     //     if (htrace) hexdump(hdesc->buffer,pofs,pofs+0x20,1);
 #endif
      p = (struct hbin_page *)(hdesc->buffer + pofs);
      if (p->id != 0x6E696268) {
-       printf("Page at 0x%x is not 'hbin', assuming file contains garbage at end\n",pofs);
+       if (info) printf("Page at 0x%x is not 'hbin', assuming file contains garbage at end\n",pofs);
        break;
      }
      hdesc->pages++;
@@ -4239,10 +4349,11 @@ struct hive *openHive(char *filename, int mode)
      printf("hdr->unknown4 (version?)  : 0x%x\n",hdr->unknown4);
    }
 
-   printf("File size %d [%x] bytes, containing %d pages (+ 1 headerpage)\n",hdesc->size,hdesc->size, hdesc->pages);
-   printf("Used for data: %d/%d blocks/bytes, unused: %d/%d blocks/bytes.\n\n",
-	  hdesc->useblk,hdesc->usetot,hdesc->unuseblk,hdesc->unusetot);
-  
+   if (info || verbose) {
+     printf("File size %d [%x] bytes, containing %d pages (+ 1 headerpage)\n",hdesc->size,hdesc->size, hdesc->pages);
+     printf("Used for data: %d/%d blocks/bytes, unused: %d/%d blocks/bytes.\n\n",
+	    hdesc->useblk,hdesc->usetot,hdesc->unuseblk,hdesc->unusetot);
+   }
 
    /* So, let's guess what kind of hive this is, based on keys in its root */
 

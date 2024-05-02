@@ -1,5 +1,5 @@
 /* ===================================================================
- * Copyright (c) 2005-2012 Vadim Druzhin (cdslow@mail.ru).
+ * Copyright (c) 2005-2014 Vadim Druzhin (cdslow@mail.ru).
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,9 +20,11 @@
 #include <windows.h>
 #include "version.h"
 
-WCHAR *AppTitle=
-    L"NTPWEdit 0.4"
+WCHAR const *AppTitle=
+    L"NTPWEdit 0.5"
 #ifdef _WIN64
     L" (64-bit)"
 #endif /* _WIN64 */
     ;
+
+WCHAR const *AppAuthor = L"\xA9 2005-2014 Vadim Druzhin";

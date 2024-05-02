@@ -49,7 +49,7 @@ void *PackDialogU(
     DWORD exstyle,
     int x, int y,
     int cx, int cy,
-    WCHAR *titlestr,
+    WCHAR const *titlestr,
     int titleid,
     LOGFONTW *fnt,
     int itemcount,
@@ -59,7 +59,7 @@ size_t AdjustToDWORD(size_t n);
 void DlgMoveItem(HWND window, int id, int x, int y, int cx, int cy);
 INT_PTR DlgRunU(
     HWND window,
-    WCHAR *strtitle,
+    WCHAR const *strtitle,
     int rctitle,
     DWORD style,
     DWORD exstyle,
@@ -69,7 +69,7 @@ INT_PTR DlgRunU(
     );
 HWND DlgShowU(
     HWND window,
-    WCHAR *strtitle,
+    WCHAR const *strtitle,
     int rctitle,
     DWORD style,
     DWORD exstyle,

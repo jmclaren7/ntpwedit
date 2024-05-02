@@ -1,5 +1,5 @@
 /* ===================================================================
- * Copyright (c) 2005-2012 Vadim Druzhin (cdslow@mail.ru).
+ * Copyright (c) 2005-2014 Vadim Druzhin (cdslow@mail.ru).
  * 
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -21,20 +21,44 @@
 #include <stdarg.h>
 #include "log.h"
 
-void logprintf(char *format, ...)
+void vlogprintf(char const *format, va_list va)
     {
 #ifndef NDEBUG
-    static FILE *log;
-    va_list va;
+    static FILE *log = NULL;
 
-    log=fopen("ntpw.log", "a");
-    if(NULL==log)
+    if(NULL == log)
+        log = fopen("ntpw.log", "w");
+
+    if(NULL == log)
         return;
-    va_start(va, format);
+
     vfprintf(log, format, va);
-    fclose(log);
-    va_end(va);
+    fflush(log);
 #else
     (void)format;
+    (void)va;
 #endif
+    }
+
+void logprintf(char const *format, ...)
+    {
+    va_list va;
+
+    va_start(va, format);
+    vlogprintf(format, va);
+    va_end(va);
+    }
+
+void flogprintf(FILE *f, char const *format, ...)
+    {
+    va_list va;
+
+    va_start(va, format);
+
+    if(f == stderr || f == stdout)
+        vlogprintf(format, va);
+    else
+        vfprintf(f, format, va);
+
+    va_end(va);
     }

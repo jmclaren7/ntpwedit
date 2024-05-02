@@ -1,5 +1,5 @@
 /* ===================================================================
- * Copyright (c) 2005-2012 Vadim Druzhin (cdslow@mail.ru).
+ * Copyright (c) 2005-2014 Vadim Druzhin (cdslow@mail.ru).
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -77,15 +77,11 @@ static BOOL OSRealUnicode=FALSE;
 void UnicodeInit(void)
     {
     OSVERSIONINFO ovi;
-    DWORD OSMajorVersion;
-    DWORD OSMinorVersion;
     DWORD OSPlatformId;
     static HINSTANCE shell32=NULL;
 
     ovi.dwOSVersionInfoSize=sizeof(ovi);
     GetVersionEx(&ovi);
-    OSMajorVersion=ovi.dwMajorVersion;
-    OSMinorVersion=ovi.dwMinorVersion;
     OSPlatformId=ovi.dwPlatformId;
     OSRealUnicode=(OSPlatformId==VER_PLATFORM_WIN32_NT);
     if(OSRealUnicode)
@@ -242,8 +238,8 @@ int strlenU(WCHAR *str)
 
 static BOOL GetNonClientMetricsW(NONCLIENTMETRICSW *ncmw)
     {
-    ncmw->cbSize=sizeof(*ncmw);
-    return SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, 0, ncmw, 0);
+    ncmw->cbSize = sizeof(*ncmw);
+    return SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(*ncmw), ncmw, 0);
     }
 
 static BOOL GetNonClientMetricsA(NONCLIENTMETRICSW *ncmw)
@@ -251,7 +247,7 @@ static BOOL GetNonClientMetricsA(NONCLIENTMETRICSW *ncmw)
     NONCLIENTMETRICSA ncma;
 
     ncma.cbSize=sizeof(ncma);
-    if(!SystemParametersInfoA(SPI_GETNONCLIENTMETRICS, 0, &ncma, 0))
+    if(!SystemParametersInfoA(SPI_GETNONCLIENTMETRICS, sizeof(ncma), &ncma, 0))
         return FALSE;
 
     ncmw->cbSize=sizeof(*ncmw);

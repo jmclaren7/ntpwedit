@@ -1,5 +1,5 @@
 /* ===================================================================
- * Copyright (c) 2005-2012 Vadim Druzhin (cdslow@mail.ru).
+ * Copyright (c) 2005-2014 Vadim Druzhin (cdslow@mail.ru).
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -34,7 +34,6 @@
  */
 
 #define STRICT
-#define _WIN32_WINNT 0x0500
 #include <windows.h>
 #include <stdlib.h>
 #include "unicode.h"
@@ -58,7 +57,7 @@ static void GetMonitorRect(POINT p, RECT *r);
 
 INT_PTR DlgRunU(
     HWND window,
-    WCHAR *strtitle,
+    WCHAR const *strtitle,
     int rctitle,
     DWORD style,
     DWORD exstyle,
@@ -109,7 +108,7 @@ INT_PTR DlgRunU(
 
 HWND DlgShowU(
     HWND window,
-    WCHAR *strtitle,
+    WCHAR const *strtitle,
     int rctitle,
     DWORD style,
     DWORD exstyle,

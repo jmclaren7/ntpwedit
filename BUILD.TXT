@@ -4,18 +4,14 @@ Requirements:
   - MINGW compiler (http://www.mingw.org/)
     or MinGW-w64 (http://mingw-w64.sourceforge.net/)
   - CMake 2.8.4 or newer (http://www.cmake.org/)
-  - PERL interpreter (e.g. http://strawberryperl.com/)
-  - OpenSSL 0.9.* sources (http://www.openssl.org/)
 
 All tools must be accesible through PATH environment variable.
 
 Procedure:
   1) Extract archive with NTPWEdit sources
-  2) Extract archive with OpenSSL sources in the same directory
-  3) Run "configure-mingw.cmd" for 32-bit build
-     or "configure-mingw64.cmd" for 64-bit build
-  4) Go to "build" subdirectory
-  5) Run "mingw32-make"
+  2) Run "configure-mingw.cmd"
+  3) Go to "build" subdirectory
+  4) Run "mingw32-make"
 
 
 * Compilation with MS Visual C *
@@ -24,15 +20,11 @@ Requirements:
   - MS Visual Studio 2010 or newer
     or MS Windows SDK for Windows 7 and .NET 4 or newer
   - CMake 2.8.4 or newer (http://www.cmake.org/)
-  - PERL interpreter (e.g. http://strawberryperl.com/)
-  - OpenSSL 0.9.* sources (http://www.openssl.org/)
 
 All tools must be accesible through PATH environment variable.
 
 Procedure:
   1) Extract archive with NTPWEdit sources
-  2) Extract archive with OpenSSL sources in the same directory
-  3) Run "configure-msvc.cmd" for 32-bit build
-     or "configure-msvc64.cmd" for 64-bit build
-  4) Go to "build" subdirectory
-  5) Run "nmake"
+  2) Run "configure-msvc.cmd"
+  3) Go to "build" subdirectory
+  4) Run "nmake"

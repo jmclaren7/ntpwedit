@@ -1,5 +1,5 @@
 /* ===================================================================
- * Copyright (c) 2005-2012 Vadim Druzhin (cdslow@mail.ru).
+ * Copyright (c) 2005-2014 Vadim Druzhin (cdslow@mail.ru).
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -33,6 +33,8 @@ static INT_PTR URL_Proc(
     HWND window, WORD id, UINT msg, WPARAM wParam, LPARAM lParam);
 static INT_PTR Version_Proc(
     HWND window, WORD id, UINT msg, WPARAM wParam, LPARAM lParam);
+static INT_PTR Copyright_Proc(
+    HWND window, WORD id, UINT msg, WPARAM wParam, LPARAM lParam);
 static void ExecDlgURL(HWND window, int item);
 static INT_PTR NTReg_Proc(
     HWND window, WORD id, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -48,13 +50,13 @@ enum
     ID_LABEL_LICENSE,
     ID_V_SPACER1,
     ID_V_SPACER2,
+    ID_V_SPACER3,
     ID_LABEL_COPYRIGHT,
     ID_LABEL_MAIL,
     ID_LABEL_URL,
     ID_GRP_CREDITS,
     ID_LABEL_CREDITS_PNH,
     ID_LABEL_CREDITS_NTREG,
-    ID_LABEL_CREDITS_SSL,
     ID_GRP_OK
     };
 
@@ -68,23 +70,17 @@ static struct DLG_Item Items[]=
     {&CtlLabel, ID_LABEL_VERSION, NULL, 0, ID_GRP_VERSION, Version_Proc},
     {&CtlLabel, ID_LABEL_LICENSE, L"GPL", 0, ID_GRP_VERSION, NULL},
     {&CtlLabel, ID_V_SPACER1, L" ", 0, ID_GRP_VERSION, NULL},
-    {&CtlLabel, ID_LABEL_COPYRIGHT, L"\xA9 2005-2012 Vadim Druzhin", 0, ID_GRP_VERSION, NULL},
+    {&CtlLabel, ID_LABEL_COPYRIGHT, NULL, 0, ID_GRP_VERSION, Copyright_Proc},
     {&CtlLabel, ID_V_SPACER2, L" ", 0, ID_GRP_VERSION, NULL},
     {&CtlLabel, ID_LABEL_MAIL, L"mailto:cdslow@mail.ru", 0, ID_GRP_VERSION, URL_Proc},
     {&CtlLabel, ID_LABEL_URL, L"http://cdslow.org.ru/ntpwedit/", 0, ID_GRP_VERSION, URL_Proc},
     {&CtlGroupBoxV, ID_GRP_CREDITS, NULL, 0, 0, NULL},
     {&CtlLabel, ID_LABEL_CREDITS_PNH,
         L"\nIncluded parts of chntpw and ntreg (registry edit library) is\n"
-        L"Copyright (c) 1997-2011 Petter Nordahl-Hagen, pnh@pogostick.net\n",
+        L"Copyright (c) Petter Nordahl-Hagen, pnh@pogostick.net\n",
         0, ID_GRP_CREDITS, NULL},
     {&CtlLabel, ID_LABEL_CREDITS_NTREG, NULL, 0, ID_GRP_CREDITS, NTReg_Proc},
-    {&CtlLabel, ID_LABEL_CREDITS_SSL,
-        L"\nThis product includes software developed by the OpenSSL Project\n"
-        L"for use in the OpenSSL Toolkit. (http://www.openssl.org/)\n"
-        L"\nThis product includes cryptographic software written by Eric Young\n"
-        L"(eay@cryptsoft.com).  This product includes software written by Tim\n"
-        L"Hudson (tjh@cryptsoft.com).\n",
-        0, ID_GRP_CREDITS, NULL},
+    {&CtlLabel, ID_V_SPACER3, L" ", 0, ID_GRP_CREDITS, NULL},
     {&CtlGroupBoxH, ID_GRP_OK, NULL, 0, 0, NULL},
     {&CtlDefButton, IDOK, L"OK", 0, ID_GRP_OK, NULL},
     };
@@ -121,6 +117,21 @@ static INT_PTR Version_Proc(
     if(WM_INITDIALOG==msg)
         {
         SetDlgItemTextU(window, id, AppTitle);
+        return TRUE;
+        }
+    
+    return FALSE;
+    }
+
+static INT_PTR Copyright_Proc(
+    HWND window, WORD id, UINT msg, WPARAM wParam, LPARAM lParam)
+    {
+    (void)wParam; /* Unused */
+    (void)lParam; /* Unused */
+
+    if(WM_INITDIALOG==msg)
+        {
+        SetDlgItemTextU(window, id, AppAuthor);
         return TRUE;
         }
     
