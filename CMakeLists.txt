@@ -26,6 +26,7 @@ endif(CMAKE_SIZEOF_VOID_P EQUAL 8)
 
 add_executable(${EXE}
     dlgabout.c
+    dlghiber.c
     dlgpass.c
     main.c
     message.c

@@ -4233,6 +4233,7 @@ struct hive *openHive(char *filename, int mode)
 
   ALLOC(hdesc->buffer,1,hdesc->size);
 
+  errno = 0; /* Reset errno */
   rt = 0;
   do {  /* On some platforms read may not block, and read in chunks. handle that */
     r = read(hdesc->filedesc, hdesc->buffer + rt, hdesc->size - rt);

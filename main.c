@@ -1,5 +1,5 @@
 /* ===================================================================
- * Copyright (c) 2005-2012 Vadim Druzhin (cdslow@mail.ru).
+ * Copyright (c) 2005-2016 Vadim Druzhin (cdslow@mail.ru).
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -33,7 +33,12 @@
 #include "message.h"
 #include "dlgpass.h"
 #include "dlgabout.h"
+#include "dlghiber.h"
 #include "version.h"
+
+#define DEF_SAM_PATH L"C:\\WINDOWS\\SYSTEM32\\CONFIG\\SAM"
+#define HIBR_TAG_LEN 4
+#define HIBR_TAG "HIBR"
 
 static INT_PTR Button_CANCEL(
     HWND window, WORD id, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -63,6 +68,9 @@ static LPARAM ListGetParam(HWND window, WORD id, int pos);
 static void EnableUserOptions(HWND window, int rid);
 static void DisableUserOptions(HWND window);
 static void CheckSave(HWND window);
+static WCHAR *SearchSAM(void);
+static BOOL CheckHiberfil(char const *path);
+static HANDLE SuperOpen(char const *file_name);
 
 enum
     {
@@ -95,7 +103,7 @@ enum
 static struct DLG_Item Items[]=
     {
     {&CtlGroupBoxH, ID_GRP_PATH, L"Path to SAM file", 0, 0, NULL},
-    {&CtlEdit, ID_EDIT_PATH, L"C:\\WINDOWS\\SYSTEM32\\CONFIG\\SAM", 0, ID_GRP_PATH, Edit_PATH},
+    {&CtlEdit, ID_EDIT_PATH, NULL, 0, ID_GRP_PATH, Edit_PATH},
     {&CtlGroupBoxSpacer, ID_SPACER_PATH, NULL, 0, ID_GRP_PATH, NULL},
     {&CtlSmallButton, ID_BUTTON_PATH, L"...", 0, ID_GRP_PATH, Button_PATH},
     {&CtlGroupBoxSpacer, ID_SPACER_OPEN, NULL, 0, ID_GRP_PATH, NULL},
@@ -199,6 +207,10 @@ static INT_PTR Edit_PATH(
     (void)id; /* Unused */
     (void)lParam; /* Unused */
 
+    /* Update initial SAM path in dialog */
+    if(WM_INITDIALOG == msg)
+        SetDlgItemTextW(window, ID_EDIT_PATH, SearchSAM());
+
     if(WM_INITDIALOG==msg || (WM_COMMAND==msg && EN_CHANGE==HIWORD(wParam)))
         {
         GetDlgItemText(window, ID_EDIT_PATH, path, sizeof(path));
@@ -226,6 +238,13 @@ static INT_PTR Button_OPEN(
     if(WM_COMMAND==msg)
         {
         GetDlgItemText(window, ID_EDIT_PATH, path, sizeof(path));
+
+        if(CheckHiberfil(path))
+            {
+            if(HiberWarning(window) != IDOK)
+                return Button_CANCEL(window, IDCANCEL, msg, wParam, lParam);
+            }
+
         if(ListUsers(window, path)<0)
             AppMessageBox(window, L"Open failed!", MB_OK);
         else if(is_hives_ro())
@@ -559,3 +578,117 @@ int CALLBACK WinMain(
     return main();
     }
 #endif /* _MSC_VER */
+
+static WCHAR *SearchSAM(void)
+    {
+    static WCHAR sam[] = DEF_SAM_PATH;
+    WCHAR root[] = L"C:\\";
+
+    while(root[0] <= L'Z')
+        {
+        UINT dt = GetDriveTypeW(root);
+
+        if(dt == DRIVE_FIXED)
+            {
+            DWORD attr;
+
+            sam[0] = root[0];
+            attr = GetFileAttributesW(sam);
+
+            if(attr != INVALID_FILE_ATTRIBUTES && !(attr & FILE_ATTRIBUTE_DIRECTORY))
+                break;
+
+            sam[0] = L'C';
+            }
+
+        ++root[0];
+        }
+
+    return sam;
+    }
+
+static BOOL CheckHiberfil(char const *path)
+    {
+    char hiberfil[] = "C:\\HIBERFIL.SYS";
+    DWORD attr;
+    HANDLE in;
+    char buf[HIBR_TAG_LEN];
+    DWORD count;
+    BOOL res = TRUE;
+
+    hiberfil[0] = path[0];
+    attr = GetFileAttributes(hiberfil);
+
+    if(attr == INVALID_FILE_ATTRIBUTES || (attr & FILE_ATTRIBUTE_DIRECTORY))
+        return FALSE;
+
+    in = CreateFile(hiberfil, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+
+    if(in == INVALID_HANDLE_VALUE)
+        in = SuperOpen(hiberfil);
+
+    if(in == INVALID_HANDLE_VALUE)
+        return TRUE;
+
+    if(ReadFile(in, buf, HIBR_TAG_LEN, &count, NULL))
+        {
+        if(count == HIBR_TAG_LEN && memcmp(buf, HIBR_TAG, HIBR_TAG_LEN) != 0)
+            res = FALSE;
+        }
+
+    CloseHandle(in);
+
+    return res;
+    }
+
+static HANDLE SuperOpen(char const *file_name)
+    {
+    HANDLE ret = INVALID_HANDLE_VALUE;
+    HANDLE token = INVALID_HANDLE_VALUE;
+    size_t const priv_size = sizeof(TOKEN_PRIVILEGES) + sizeof(LUID_AND_ATTRIBUTES);
+    TOKEN_PRIVILEGES *priv = NULL;
+    TOKEN_PRIVILEGES *old_priv = NULL;
+    DWORD old_priv_size = 0;
+
+    do
+        {
+        if(!OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &token))
+            break;
+
+        priv = malloc(priv_size);
+        if(!priv)
+            break;
+
+        old_priv = malloc(priv_size);
+        if(!old_priv)
+            break;
+
+        priv->PrivilegeCount = 2;
+
+        if(!LookupPrivilegeValue(NULL, SE_BACKUP_NAME, &(priv->Privileges[0].Luid)))
+            break;
+
+        priv->Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+
+        if(!LookupPrivilegeValue(NULL, SE_RESTORE_NAME, &(priv->Privileges[1].Luid)))
+            break;
+
+        priv->Privileges[1].Attributes = SE_PRIVILEGE_ENABLED;
+
+        if(!AdjustTokenPrivileges(token, FALSE, priv, priv_size, old_priv, &old_priv_size))
+            break;
+
+        ret = CreateFile(file_name, GENERIC_READ, FILE_SHARE_READ,
+            NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
+        }
+    while(0);
+
+    if(old_priv_size != 0)
+        AdjustTokenPrivileges(token, FALSE, old_priv, 0, NULL, NULL);
+
+    free(old_priv);
+    free(priv);
+    CloseHandle(token);
+
+    return ret;
+    }
