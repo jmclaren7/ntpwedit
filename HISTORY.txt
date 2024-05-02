@@ -1,4 +1,8 @@
-ntpwedit - Copyright (c) 2005-2016 Vadim Druzhin (cdslow@mail.ru)
+ntpwedit - Copyright (c) 2005-2017 Vadim Druzhin (cdslow@mail.ru)
+
+* 26.09.2017 Vadim Druzhin <cdslow@mail.ru>
+  Version 0.7
+  - always enable "Unlock" button for accounts that can expire
 
 * 07.11.2016 Vadim Druzhin <cdslow@mail.ru>
   Version 0.6

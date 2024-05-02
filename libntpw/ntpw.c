@@ -1,5 +1,5 @@
 /* ===================================================================
- * Copyright (c) 2005-2014 Vadim Druzhin (cdslow@mail.ru).
+ * Copyright (c) 2005-2017 Vadim Druzhin (cdslow@mail.ru).
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -227,6 +227,10 @@ int is_account_locked(int rid)
         logprintf("Account is %s\n",
             (acb & ACB_DISABLED) ? "disabled" : "probably locked out!");
         ret=1;
+        }
+    else if(!(acb&ACB_PWNOEXP))
+        {
+        ret = 2; /* Account may expire */
         }
     else
         ret=0;

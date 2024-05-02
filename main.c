@@ -1,5 +1,5 @@
 /* ===================================================================
- * Copyright (c) 2005-2016 Vadim Druzhin (cdslow@mail.ru).
+ * Copyright (c) 2005-2017 Vadim Druzhin (cdslow@mail.ru).
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -410,7 +410,7 @@ static LPARAM ListGetParam(HWND window, WORD id, int pos)
 
 static void EnableUserOptions(HWND window, int rid)
     {
-    if(1==is_account_locked(rid))
+    if(0!=is_account_locked(rid))
         EnableWindow(GetDlgItem(window, ID_BUTTON_UNLOCK), TRUE);
     EnableWindow(GetDlgItem(window, ID_BUTTON_PASS), TRUE);
     }
