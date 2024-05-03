@@ -21,7 +21,7 @@
 #include "version.h"
 
 WCHAR const *AppTitle=
-    L"NTPWEdit 0.7"
+    L"NTPWEdit 0.7a"
 #ifdef _WIN64
     L" (64-bit)"
 #endif /* _WIN64 */
