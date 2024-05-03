@@ -25,6 +25,7 @@ else()
 endif(CMAKE_SIZEOF_VOID_P EQUAL 8)
 
 add_executable(${EXE}
+    WIN32
     dlgabout.c
     dlghiber.c
     dlgpass.c
