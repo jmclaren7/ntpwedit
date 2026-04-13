@@ -52,6 +52,8 @@ static INT_PTR Button_UNLOCK(
     HWND window, WORD id, UINT msg, WPARAM wParam, LPARAM lParam);
 static INT_PTR Button_PASS(
     HWND window, WORD id, UINT msg, WPARAM wParam, LPARAM lParam);
+static INT_PTR Button_UNLINK(
+    HWND window, WORD id, UINT msg, WPARAM wParam, LPARAM lParam);
 static INT_PTR Button_SAVE(
     HWND window, WORD id, UINT msg, WPARAM wParam, LPARAM lParam);
 static INT_PTR ListProc(
@@ -94,6 +96,7 @@ enum
     ID_BUTTON_UNLOCK,
     ID_SPACER_UNLOCK,
     ID_BUTTON_PASS,
+    ID_BUTTON_UNLINK,
     ID_GRP_BUTTON,
     ID_SPACER_OK,
     ID_BUTTON_SAVE,
@@ -118,6 +121,7 @@ static struct DLG_Item Items[]=
     {&CtlButton, ID_BUTTON_UNLOCK, L"Unlock", 0, ID_GRP_ACTIONS, Button_UNLOCK},
     {&CtlGroupBoxSpacer, ID_SPACER_UNLOCK, NULL, 0, ID_GRP_ACTIONS, NULL},
     {&CtlButton, ID_BUTTON_PASS, L"Change password", 0, ID_GRP_ACTIONS, Button_PASS},
+    {&CtlButton, ID_BUTTON_UNLINK, L"Unlink MS", 0, ID_GRP_ACTIONS, Button_UNLINK},
 
     {&CtlGroupBoxH, ID_GRP_BUTTON, NULL, 0, 0, NULL},
     {&CtlButton, ID_BUTTON_SAVE, L"Save changes", 0, ID_GRP_BUTTON, Button_SAVE},
@@ -413,18 +417,55 @@ static void EnableUserOptions(HWND window, int rid)
     if(0!=is_account_locked(rid))
         EnableWindow(GetDlgItem(window, ID_BUTTON_UNLOCK), TRUE);
     EnableWindow(GetDlgItem(window, ID_BUTTON_PASS), TRUE);
+    if(is_ms_account(rid)>0)
+        EnableWindow(GetDlgItem(window, ID_BUTTON_UNLINK), TRUE);
+    else
+        EnableWindow(GetDlgItem(window, ID_BUTTON_UNLINK), FALSE);
     }
 
 static void DisableUserOptions(HWND window)
     {
     EnableWindow(GetDlgItem(window, ID_BUTTON_UNLOCK), FALSE);
     EnableWindow(GetDlgItem(window, ID_BUTTON_PASS), FALSE);
+    EnableWindow(GetDlgItem(window, ID_BUTTON_UNLINK), FALSE);
     }
 
 static void CheckSave(HWND window)
     {
     EnableWindow(GetDlgItem(window, ID_BUTTON_SAVE),
         is_hives_dirty() && !is_hives_ro());
+    }
+
+static INT_PTR Button_UNLINK(
+    HWND window, WORD id, UINT msg, WPARAM wParam, LPARAM lParam)
+    {
+    (void)wParam; (void)lParam;
+    if(WM_INITDIALOG==msg)
+        {
+        EnableWindow(GetDlgItem(window, id), FALSE);
+        return TRUE;
+        }
+    else if(WM_COMMAND==msg)
+        {
+        int pos = ListGetPos(window, ID_LIST_USERS);
+        if(pos>=0)
+            {
+            int rid = (int)ListGetParam(window, ID_LIST_USERS, pos);
+            char pass[17];
+            if(QueryPassword(window, pass, sizeof(pass)))
+                {
+                if(!unlink_ms_account(rid, pass))
+                    AppMessageBox(window, L"Unlink failed!", MB_OK);
+                else
+                    {
+                    EnableWindow(GetDlgItem(window, id), FALSE);
+                    CheckSave(window);
+                    }
+                }
+            }
+        return TRUE;
+        }
+    return FALSE;
     }
 
 static int ListUsers(HWND window, char *path)
@@ -437,6 +478,34 @@ static int ListUsers(HWND window, char *path)
     ListDeleteAll(window, ID_LIST_USERS);
 
     names[H_SAM]=path;
+    /* Derive SECURITY hive path by replacing trailing \SAM with \SECURITY */
+    static char secpath[MAX_PATH];
+    static char softpath[MAX_PATH];
+    do {
+        size_t len = strlen(path);
+        if(len >= 3 && len < sizeof(secpath)-1)
+            {
+            strcpy(secpath, path);
+            char *p = strrchr(secpath, '\\');
+            if(p)
+                {
+                *(p+1)=0;
+                strcat(secpath, "SECURITY");
+                names[H_SEC]=secpath;
+                }
+            }
+        if(len >= 3 && len < sizeof(softpath)-1)
+            {
+            strcpy(softpath, path);
+            char *p = strrchr(softpath, '\\');
+            if(p)
+                {
+                *(p+1)=0;
+                strcat(softpath, "SOFTWARE");
+                names[H_SOFT]=softpath;
+                }
+            }
+    } while(0);
     if(0==open_hives(names))
         return -1;
 

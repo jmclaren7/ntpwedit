@@ -1,7 +1,8 @@
 #ifndef __NTPW_H__
 #define __NTPW_H__
 
-enum HIVE_ID {H_SAM=0, /*H_SYS, H_SEC, H_SOF,*/ H_COUNT};
+/* Supported offline registry hives */
+enum HIVE_ID {H_SAM=0, H_SEC, H_SOFT, /* Future: H_SYS, H_SOF, */ H_COUNT};
 
 struct user_info
     {
@@ -26,5 +27,12 @@ struct user_info *next_user(struct search_user *su);
 int is_account_locked(int rid);
 int unlock_account(int rid);
 int change_password(int rid, char *password);
+/* Returns 1 if the account appears to be a connected Microsoft account, 0 if not, -1 on error */
+int is_ms_account(int rid);
+/* Unlink a connected Microsoft account by setting a new local password.
+ * Currently this simply installs a new password hash (making offline login possible)
+ * and relies on Windows to treat it as local on next boot.
+ */
+int unlink_ms_account(int rid, char *password);
 
 #endif /* __NTPW_H__*/
